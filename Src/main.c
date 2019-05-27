@@ -93,19 +93,17 @@ static void LCD_Config();
 /* USER CODE BEGIN 0 */
 /* USER CODE BEGIN 0 */
 
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)//saber coordenadas do Touch Screen
+/*void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)//saber coordenadas do Touch Screen
 {
-	TS_StateTypeDef TS_State;
-
 	if(GPIO_Pin == GPIO_PIN_13)
 	{
 		BSP_TS_GetState(&TS_State);
-		sprintf(string, "X = %3d", (int)TS_State.touchX[0]);
+		sprintf(string, "X = %d", (int)TS_State.touchX[0]);
 		BSP_LCD_DisplayStringAtLine(4, (uint8_t*)string);
-		sprintf(string, "Y = %3d", (int)TS_State.touchY[0]);
+		sprintf(string, "Y = %d", (int)TS_State.touchY[0]);
 		BSP_LCD_DisplayStringAtLine(5, (uint8_t*)string);
 	}
-}
+}*/
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* adcHandle)
 {
@@ -226,6 +224,16 @@ int main(void)
 		  BSP_LCD_SetFont(&Font12);
 		  BSP_LCD_DisplayStringAt(0, BSP_LCD_GetYSize()/2 - 232, (uint8_t *)string, RIGHT_MODE);
 		  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+	  }
+
+	  BSP_TS_GetState(&TS_State);
+
+	  if(TS_State.touchDetected)
+	  {
+		  sprintf(string, "X = %d", (int)TS_State.touchX[0]);
+		  BSP_LCD_DisplayStringAtLine(4, (uint8_t*)string);
+		  sprintf(string, "Y = %d", (int)TS_State.touchY[0]);
+		  BSP_LCD_DisplayStringAtLine(5, (uint8_t*)string);
 	  }
 
 	  //LED blinking each 0.5 second (500 ms)
