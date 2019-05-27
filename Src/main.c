@@ -59,25 +59,32 @@ DSI_HandleTypeDef hdsi;
 LTDC_HandleTypeDef hltdc;
 
 TIM_HandleTypeDef htim6;
+TIM_HandleTypeDef htim7;
 
 SDRAM_HandleTypeDef hsdram1;
 
 /* USER CODE BEGIN PV */
-volatile int flag = 0;
-volatile int counter = 0;
-volatile long int JTemp = 0;
-volatile uint32_t ConvertedValue;
+TS_StateTypeDef TS_State;
+uint16_t maxLCD = 0;
+volatile int flagT6 = 0;
+volatile int flagT7 = 0;
+volatile int counterT6 = 0;
+volatile int counterT7 = 0;
+volatile long int JTemp = 0; //Internal Temperature converted
+volatile uint32_t ConvertedValue; //Value to convert internal temperature
+char string[100];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_ADC1_Init(void);
 static void MX_DMA2D_Init(void);
 static void MX_DSIHOST_DSI_Init(void);
 static void MX_FMC_Init(void);
 static void MX_LTDC_Init(void);
-static void MX_ADC1_Init(void);
 static void MX_TIM6_Init(void);
+static void MX_TIM7_Init(void);
 /* USER CODE BEGIN PFP */
 static void LCD_Config();
 /* USER CODE END PFP */
@@ -86,20 +93,54 @@ static void LCD_Config();
 /* USER CODE BEGIN 0 */
 /* USER CODE BEGIN 0 */
 
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)//saber coordenadas do Touch Screen
+{
+	TS_StateTypeDef TS_State;
+
+	if(GPIO_Pin == GPIO_PIN_13)
+	{
+		BSP_TS_GetState(&TS_State);
+		sprintf(string, "X = %3d", (int)TS_State.touchX[0]);
+		BSP_LCD_DisplayStringAtLine(4, (uint8_t*)string);
+		sprintf(string, "Y = %3d", (int)TS_State.touchY[0]);
+		BSP_LCD_DisplayStringAtLine(5, (uint8_t*)string);
+	}
+}
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* adcHandle)
+{
+	if(adcHandle == &hadc1)
+		ConvertedValue = HAL_ADC_GetValue(&hadc1);
+}
+
 void HAL_TIM_PeriodElapsedCallback (TIM_HandleTypeDef *htim)
 {
 	if(htim->Instance == TIM6)
 	{
-		flag = 1;
-		counter++;
+		counterT6++;
+		flagT6 = 1;
+	}
 
-		  if (counter%2 == 0)
-		  {
-			  ConvertedValue=HAL_ADC_GetValue(&hadc1); //get value
-			  JTemp = ((((ConvertedValue * VREF)/MAX_CONVERTED_VALUE) - VSENS_AT_AMBIENT_TEMP) * 10 / AVG_SLOPE) + AMBIENT_TEMP;
-		  }
+	if(htim->Instance == TIM7)
+	{
+		counterT7++;
+		flagT7 = 1;
 	}
 }
+
+void gameboard()
+{
+	  for(int i = 0; i<=8; i++)
+	  {
+		  BSP_LCD_DrawVLine(BSP_LCD_GetXSize()/40 + (BSP_LCD_GetXSize()/16)*i, BSP_LCD_GetYSize()/10, 400);
+	  }
+
+	  for(int j = 0; j<=8; j++)
+	  {
+		  BSP_LCD_DrawHLine(BSP_LCD_GetXSize()/40, BSP_LCD_GetYSize()/10 + (BSP_LCD_GetYSize()/9.6)*j, 400);
+	  }
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -109,7 +150,6 @@ void HAL_TIM_PeriodElapsedCallback (TIM_HandleTypeDef *htim)
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-	char string[100];
   /* USER CODE END 1 */
   
 
@@ -137,21 +177,26 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_ADC1_Init();
   MX_DMA2D_Init();
   MX_DSIHOST_DSI_Init();
   MX_FMC_Init();
   MX_LTDC_Init();
-  MX_ADC1_Init();
   MX_TIM6_Init();
+  MX_TIM7_Init();
   /* USER CODE BEGIN 2 */
+  BSP_PB_Init(BUTTON_WAKEUP, BUTTON_MODE_GPIO); //Button to use to go back to the menu
   BSP_LED_Init(LED_GREEN);
   BSP_LED_Init(LED_RED);
-  HAL_ADC_Start(&hadc1);
-  HAL_TIM_Base_Start_IT(&htim6);
+
+  BSP_TS_Init(BSP_LCD_GetXSize(),BSP_LCD_GetYSize()); //Configs Touch Screen
+  BSP_TS_ITConfig();
+
   LCD_Config();
-
-  BSP_PB_Init(BUTTON_WAKEUP, BUTTON_MODE_GPIO); //Button to use to go back to the menu
-
+  HAL_ADC_Start_IT(&hadc1);
+  HAL_TIM_Base_Start_IT(&htim6);
+  HAL_TIM_Base_Start_IT(&htim7);
+  gameboard();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -162,15 +207,26 @@ int main(void)
 
   while (1)
   {
-  	  //Show temperature in celsius
-	  sprintf(string, "Temp: %ld C", JTemp);
-	  BSP_LCD_SetFont(&Font12);
-	  BSP_LCD_DisplayStringAt(0, BSP_LCD_GetYSize()/2 - 232, (uint8_t *)string, RIGHT_MODE);
+	  if(flagT6)
+	  {
+		  flagT6 = 0;
+		  //Show time in seconds
+		  sprintf(string, "Time: %d s", counterT6);
+		  BSP_LCD_SetFont(&Font12);
+		  BSP_LCD_DisplayStringAt(0, BSP_LCD_GetYSize()/2 - 214, (uint8_t *)string, RIGHT_MODE);
+		  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+	  }
 
-	  //Show time in seconds
-	  sprintf(string, "Time: %d s", counter);
-	  BSP_LCD_SetFont(&Font12);
-	  BSP_LCD_DisplayStringAt(0, BSP_LCD_GetYSize()/2 - 214, (uint8_t *)string, RIGHT_MODE);
+	  if(flagT7)
+	  {
+		  flagT7 = 0;
+		  JTemp = ((((ConvertedValue * VREF)/MAX_CONVERTED_VALUE) - VSENS_AT_AMBIENT_TEMP) * 10 / AVG_SLOPE) + AMBIENT_TEMP;
+		  //Show temperature in celsius
+		  sprintf(string, "Temp: %ld C", JTemp);
+		  BSP_LCD_SetFont(&Font12);
+		  BSP_LCD_DisplayStringAt(0, BSP_LCD_GetYSize()/2 - 232, (uint8_t *)string, RIGHT_MODE);
+		  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+	  }
 
 	  //LED blinking each 0.5 second (500 ms)
 	  if(HAL_GetTick() >= init_tick_led1 + 500)
@@ -570,6 +626,44 @@ static void MX_TIM6_Init(void)
 
 }
 
+/**
+  * @brief TIM7 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM7_Init(void)
+{
+
+  /* USER CODE BEGIN TIM7_Init 0 */
+
+  /* USER CODE END TIM7_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM7_Init 1 */
+
+  /* USER CODE END TIM7_Init 1 */
+  htim7.Instance = TIM7;
+  htim7.Init.Prescaler = 9999;
+  htim7.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim7.Init.Period = 19999;
+  htim7.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim7) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim7, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM7_Init 2 */
+
+  /* USER CODE END TIM7_Init 2 */
+
+}
+
 /* FMC initialization function */
 static void MX_FMC_Init(void)
 {
@@ -676,6 +770,10 @@ static void LCD_Config(void)
   BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
   BSP_LCD_SetBackColor(LCD_COLOR_LIGHTRED);
   BSP_LCD_SetFont(&Font24);
+
+  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+  BSP_LCD_FillRect(BSP_LCD_GetXSize()/10, BSP_LCD_GetYSize()/10, 400, 400);
+  BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
 }
 /* USER CODE END 4 */
 
