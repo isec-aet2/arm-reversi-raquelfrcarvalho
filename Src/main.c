@@ -37,11 +37,12 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define MAX_CONVERTED_VALUE   4095    /* Max converted value */
+#define SQUARE                	BSP_LCD_GetYSize()/10
+#define MAX_CONVERTED_VALUE   	4095    /* Max converted value */
 #define AMBIENT_TEMP            25    /* Ambient Temperature */
-#define VSENS_AT_AMBIENT_TEMP  760    /* VSENSE value (mv) at ambient temperature */
+#define VSENS_AT_AMBIENT_TEMP  	760    /* VSENSE value (mv) at ambient temperature */
 #define AVG_SLOPE               25    /* Avg_Solpe multiply by 10 */
-#define VREF                  3300
+#define VREF                  	3300
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -128,14 +129,15 @@ void HAL_TIM_PeriodElapsedCallback (TIM_HandleTypeDef *htim)
 
 void gameboard()
 {
-	  for(int i = 0; i<=8; i++)
+	  for(int i = 0; i<8; i++)
 	  {
-		  BSP_LCD_DrawVLine(BSP_LCD_GetXSize()/40 + (BSP_LCD_GetXSize()/16)*i, BSP_LCD_GetYSize()/10, 400);
-	  }
+		  int xPosition = BSP_LCD_GetXSize()/10 + i*SQUARE;
 
-	  for(int j = 0; j<=8; j++)
-	  {
-		  BSP_LCD_DrawHLine(BSP_LCD_GetXSize()/40, BSP_LCD_GetYSize()/10 + (BSP_LCD_GetYSize()/9.6)*j, 400);
+		  for(int j = 0; j<8; j++)
+		  {
+			  int yPosition = SQUARE + j*SQUARE;
+			  BSP_LCD_DrawRect(xPosition, yPosition, SQUARE, SQUARE);
+		  }
 	  }
 }
 
@@ -148,6 +150,10 @@ void gameboard()
 int main(void)
 {
   /* USER CODE BEGIN 1 */
+	int posB_y;
+	int posB_x;
+	int valorX = 0;
+	int valorY = 0;
   /* USER CODE END 1 */
   
 
@@ -202,6 +208,8 @@ int main(void)
 
 	int init_tick_led1= HAL_GetTick();
 	int init_tick_led2= HAL_GetTick();
+	  posB_y = 250;
+	  posB_x = 200;
 
   while (1)
   {
@@ -234,6 +242,13 @@ int main(void)
 		  BSP_LCD_DisplayStringAtLine(4, (uint8_t*)string);
 		  sprintf(string, "Y = %d", (int)TS_State.touchY[0]);
 		  BSP_LCD_DisplayStringAtLine(5, (uint8_t*)string);
+
+			BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+			BSP_LCD_FillCircle(posB_x,posB_y,28);
+			//Ball moves according acceleration values (X and Y)
+			BSP_LCD_SetTextColor(LCD_COLOR_DARKGREEN);
+			BSP_LCD_FillCircle(posB_x,posB_y,20);
+			BSP_LCD_DrawCircle(posB_x,posB_y,25);
 	  }
 
 	  //LED blinking each 0.5 second (500 ms)
@@ -249,6 +264,8 @@ int main(void)
 		  init_tick_led2 = HAL_GetTick();
 		  BSP_LED_Toggle(LED2);
 	  }
+
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
