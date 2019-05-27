@@ -66,11 +66,12 @@ SDRAM_HandleTypeDef hsdram1;
 
 /* USER CODE BEGIN PV */
 TS_StateTypeDef TS_State;
-uint16_t maxLCD = 0;
+volatile int flagTS = 0;
 volatile int flagT6 = 0;
 volatile int flagT7 = 0;
 volatile int counterT6 = 0;
 volatile int counterT7 = 0;
+volatile int player = 0;
 volatile long int JTemp = 0; //Internal Temperature converted
 volatile uint32_t ConvertedValue; //Value to convert internal temperature
 char string[100];
@@ -94,17 +95,14 @@ static void LCD_Config();
 /* USER CODE BEGIN 0 */
 /* USER CODE BEGIN 0 */
 
-/*void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)//saber coordenadas do Touch Screen
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)//saber coordenadas do Touch Screen
 {
 	if(GPIO_Pin == GPIO_PIN_13)
 	{
 		BSP_TS_GetState(&TS_State);
-		sprintf(string, "X = %d", (int)TS_State.touchX[0]);
-		BSP_LCD_DisplayStringAtLine(4, (uint8_t*)string);
-		sprintf(string, "Y = %d", (int)TS_State.touchY[0]);
-		BSP_LCD_DisplayStringAtLine(5, (uint8_t*)string);
+		flagTS = 1;
 	}
-}*/
+}
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* adcHandle)
 {
@@ -137,9 +135,33 @@ void gameboard()
 		  {
 			  int yPosition = SQUARE + j*SQUARE;
 			  BSP_LCD_DrawRect(xPosition, yPosition, SQUARE, SQUARE);
+			  BSP_LCD_SetTextColor(LCD_COLOR_DARKGRAY);
+			  BSP_LCD_FillRect(xPosition, yPosition, SQUARE-2, SQUARE-2);
 		  }
 	  }
 }
+
+void inicialPosition()
+{
+	int posA_y = SQUARE+24;
+	int posA_x = SQUARE+56;
+
+	//Ball player 1 (X and Y)
+	BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+	BSP_LCD_FillCircle(posA_x+SQUARE*4, posA_y+SQUARE*4, 16);
+	BSP_LCD_DrawCircle(posA_x+SQUARE*4, posA_y+SQUARE*4, 21);
+	BSP_LCD_FillCircle(posA_x+SQUARE*3, posA_y+SQUARE*3, 16);
+	BSP_LCD_DrawCircle(posA_x+SQUARE*3, posA_y+SQUARE*3, 21);
+	BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+
+	//Ball player 2 (X and Y)
+	BSP_LCD_SetTextColor(LCD_COLOR_LIGHTRED);
+	BSP_LCD_FillCircle(posA_x+SQUARE*3, posA_y+SQUARE*4, 16);
+	BSP_LCD_DrawCircle(posA_x+SQUARE*3, posA_y+SQUARE*4, 21);
+	BSP_LCD_FillCircle(posA_x+SQUARE*4, posA_y+SQUARE*3, 16);
+	BSP_LCD_DrawCircle(posA_x+SQUARE*4, posA_y+SQUARE*3, 21);
+}
+
 
 /* USER CODE END 0 */
 
@@ -150,10 +172,6 @@ void gameboard()
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-	int posB_y;
-	int posB_x;
-	int valorX = 0;
-	int valorY = 0;
   /* USER CODE END 1 */
   
 
@@ -192,15 +210,14 @@ int main(void)
   BSP_PB_Init(BUTTON_WAKEUP, BUTTON_MODE_GPIO); //Button to use to go back to the menu
   BSP_LED_Init(LED_GREEN);
   BSP_LED_Init(LED_RED);
-
+  LCD_Config();
   BSP_TS_Init(BSP_LCD_GetXSize(),BSP_LCD_GetYSize()); //Configs Touch Screen
   BSP_TS_ITConfig();
-
-  LCD_Config();
   HAL_ADC_Start_IT(&hadc1);
   HAL_TIM_Base_Start_IT(&htim6);
   HAL_TIM_Base_Start_IT(&htim7);
   gameboard();
+  inicialPosition();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -208,9 +225,8 @@ int main(void)
 
 	int init_tick_led1= HAL_GetTick();
 	int init_tick_led2= HAL_GetTick();
-	  posB_y = 250;
-	  posB_x = 200;
 
+	//jogador ^= 1; 				0^0 = 1     1^1 = 0
   while (1)
   {
 	  if(flagT6)
@@ -234,21 +250,16 @@ int main(void)
 		  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
 	  }
 
-	  BSP_TS_GetState(&TS_State);
-
 	  if(TS_State.touchDetected)
 	  {
-		  sprintf(string, "X = %d", (int)TS_State.touchX[0]);
+		  flagTS = 0;
+
+		  /*sprintf(string, "X = %d", (int)TS_State.touchX[0]);
 		  BSP_LCD_DisplayStringAtLine(4, (uint8_t*)string);
 		  sprintf(string, "Y = %d", (int)TS_State.touchY[0]);
-		  BSP_LCD_DisplayStringAtLine(5, (uint8_t*)string);
+		  BSP_LCD_DisplayStringAtLine(5, (uint8_t*)string);*/
 
-			BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-			BSP_LCD_FillCircle(posB_x,posB_y,28);
-			//Ball moves according acceleration values (X and Y)
-			BSP_LCD_SetTextColor(LCD_COLOR_DARKGREEN);
-			BSP_LCD_FillCircle(posB_x,posB_y,20);
-			BSP_LCD_DrawCircle(posB_x,posB_y,25);
+		  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
 	  }
 
 	  //LED blinking each 0.5 second (500 ms)
