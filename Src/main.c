@@ -38,8 +38,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define SIZE					8
-#define X0						56
-#define Y0						24
+#define POS0					BSP_LCD_GetYSize()/20
 #define SQUARE                	BSP_LCD_GetYSize()/10
 #define MAX_CONVERTED_VALUE   	4095    /* Max converted value */
 #define AMBIENT_TEMP            25    /* Ambient Temperature */
@@ -55,13 +54,9 @@
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
-
 DMA2D_HandleTypeDef hdma2d;
-
 DSI_HandleTypeDef hdsi;
-
 LTDC_HandleTypeDef hltdc;
-
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim6;
 TIM_HandleTypeDef htim7;
@@ -71,6 +66,7 @@ SDRAM_HandleTypeDef hsdram1;
 /* USER CODE BEGIN PV */
 TS_StateTypeDef TS_State;
 volatile uint8_t flagTS = 0;
+volatile uint8_t flagPB = 0;
 volatile uint8_t flagT2 = 0;
 volatile uint8_t flagT6 = 0;
 volatile uint8_t flagT7 = 0;
@@ -84,11 +80,10 @@ volatile uint8_t counterTS = 0;
 volatile long int JTemp = 0; //Internal Temperature converted
 volatile uint32_t ConvertedValue; //Value to convert internal temperature
 char string[100];
+int board [SIZE][SIZE];
 
 volatile int posX;
 volatile int posY;
-volatile int x0 = X0;
-volatile int y0 = Y0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -121,6 +116,15 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 		}
 		flagTS = 1;
 	}
+
+	/*if(flagPB == 0) //PB - push button
+	{
+		if(GPIO_Pin == GPIO_PIN_0)
+		{
+			BSP_PB_GetState(BUTTON_WAKEUP);
+		}
+		flagPB = 1;
+	}*/
 }
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* adcHandle)
@@ -154,7 +158,7 @@ void gameboard()
 {
 	  for(int i = 0; i<SIZE; i++)
 	  {
-		  int xPosition = BSP_LCD_GetXSize()/10 + i * SQUARE;
+		  int xPosition = SQUARE + i * SQUARE;
 
 		  for(int j = 0; j<SIZE; j++)
 		  {
@@ -171,18 +175,18 @@ void inicialPosition()
 {
 	//Ball player 1 (X and Y)
 	BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-	BSP_LCD_FillCircle(x0+SQUARE*5, y0+SQUARE*5, 16);
-	BSP_LCD_DrawCircle(x0+SQUARE*5, y0+SQUARE*5, 21);
-	BSP_LCD_FillCircle(x0+SQUARE*4, y0+SQUARE*4, 16);
-	BSP_LCD_DrawCircle(x0+SQUARE*4, y0+SQUARE*4, 21);
+	BSP_LCD_FillCircle(POS0+SQUARE*5, POS0+SQUARE*5, 16);
+	BSP_LCD_DrawCircle(POS0+SQUARE*5, POS0+SQUARE*5, 21);
+	BSP_LCD_FillCircle(POS0+SQUARE*4, POS0+SQUARE*4, 16);
+	BSP_LCD_DrawCircle(POS0+SQUARE*4, POS0+SQUARE*4, 21);
 	BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
 
 	//Ball player 2 (X and Y)
 	BSP_LCD_SetTextColor(LCD_COLOR_LIGHTRED);
-	BSP_LCD_FillCircle(x0+SQUARE*4, y0+SQUARE*5, 16);
-	BSP_LCD_DrawCircle(x0+SQUARE*4, y0+SQUARE*5, 21);
-	BSP_LCD_FillCircle(x0+SQUARE*5, y0+SQUARE*4, 16);
-	BSP_LCD_DrawCircle(x0+SQUARE*5, y0+SQUARE*4, 21);
+	BSP_LCD_FillCircle(POS0+SQUARE*4, POS0+SQUARE*5, 16);
+	BSP_LCD_DrawCircle(POS0+SQUARE*4, POS0+SQUARE*5, 21);
+	BSP_LCD_FillCircle(POS0+SQUARE*5, POS0+SQUARE*4, 16);
+	BSP_LCD_DrawCircle(POS0+SQUARE*5, POS0+SQUARE*4, 21);
 	BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
 }
 
@@ -190,17 +194,17 @@ void placePieces(uint16_t x, uint16_t y)
 {
     flagTS=0;
 
-    if(TS_State.touchX[0]>=(x0) && TS_State.touchY[0]>=(y0) && TS_State.touchX[0]<=x0+SQUARE*SIZE && TS_State.touchY[0]<=y0+SQUARE*SIZE)
+    if(TS_State.touchX[0]>=(POS0) && TS_State.touchY[0]>=(POS0) && TS_State.touchX[0]<= POS0 + SQUARE*SIZE && TS_State.touchY[0]<= POS0 + SQUARE*SIZE)
 	{
-        for(int i=0; i<=SIZE; i++)
+        for(int i=1; i<=SIZE; i++)
 		{
-			for(int j=0; j<=SIZE; j++)
+			for(int j=1; j<=SIZE; j++)
 			{
 				if((TS_State.touchX[0]) > SQUARE*i && (TS_State.touchX[0]) <= SQUARE*(i+1) &&
 					(TS_State.touchY[0]) > SQUARE*j && (TS_State.touchY[0]) <= SQUARE*(j+1))
 				{
-					posX = x0+SQUARE*i;
-					posY = y0+SQUARE*j;
+					posX = POS0+SQUARE*i;
+					posY = POS0+SQUARE*j;
 					i = SIZE;
 					j = SIZE;
 				}
@@ -208,42 +212,6 @@ void placePieces(uint16_t x, uint16_t y)
 		}
 	}
 }
-/*void placePieces(uint16_t x, uint16_t y)
-{
-		if(x > SQUARE*1 && x <= SQUARE*2)
-			posX = SQUARE*1 + 56;
-		else if(x > SQUARE*2 && x <= SQUARE*3)
-			posX = SQUARE*2 + 56;
-		else if(x > SQUARE*3 && x <= SQUARE*4)
-			posX = SQUARE*3 + 56;
-		else if(x > SQUARE*4 && x <= SQUARE*5)
-			posX = SQUARE*4 + 56;
-		else if(x > SQUARE*5 && x <= SQUARE*6)
-			posX = SQUARE*5 + 56;
-		else if(x > SQUARE*6 && x <= SQUARE*7)
-			posX = SQUARE*6 + 56;
-		else if(x > SQUARE*7 && x <= SQUARE*8)
-			posX = SQUARE*7 + 56;
-		else if(x > SQUARE*8 && x <= SQUARE*9)
-			posX = SQUARE*8 + 56;
-
-		if(y > SQUARE*1 && y <= SQUARE*2)
-			posY = SQUARE*1 + 24;
-		else if(y > SQUARE*2 && y <= SQUARE*3)
-			posY = SQUARE*2 + 24;
-		else if(y > SQUARE*3 && y <= SQUARE*4)
-			posY = SQUARE*3 + 24;
-		else if(y > SQUARE*4 && y <= SQUARE*5)
-			posY = SQUARE*4 + 24;
-		else if(y > SQUARE*5 && y <= SQUARE*6)
-			posY = SQUARE*5 + 24;
-		else if(y > SQUARE*6 && y <= SQUARE*7)
-			posY = SQUARE*6 + 24;
-		else if(y > SQUARE*7 && y <= SQUARE*8)
-			posY = SQUARE*7 + 24;
-		else if(y > SQUARE*8 && y <= SQUARE*9)
-			posY = SQUARE*8 + 24;
-}*/
 
 /* USER CODE END 0 */
 
@@ -290,7 +258,7 @@ int main(void)
   MX_TIM6_Init();
   MX_TIM7_Init();
   /* USER CODE BEGIN 2 */
-  BSP_PB_Init(BUTTON_WAKEUP, BUTTON_MODE_GPIO); //Button to use to go back to the menu
+  //BSP_PB_Init(BUTTON_WAKEUP, BUTTON_MODE_EXTI); //Button to use to go back to the menu
   BSP_LED_Init(LED_GREEN);
   BSP_LED_Init(LED_RED);
   LCD_Config();
@@ -308,15 +276,12 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
-	int init_tick_led1= HAL_GetTick();
 	int init_tick_led2= HAL_GetTick();
 
   while (1)
   {
 	  if(flagT2)
 	  {
-		  //HAL_Delay(100);
-
 		  flagT2 = 0;
 
 		  if(counterT2 >= 0 && counterT2 <= 20 )
@@ -384,18 +349,19 @@ int main(void)
 		  counterTS = 0;
 	  }
 
-	  //LED blinking each 0.5 second (500 ms)
-	  if(HAL_GetTick() >= init_tick_led1 + 500)
+	  //LED blinking when push button is pressed
+	  /*if(flagPB)
 	  {
-		  init_tick_led1 = HAL_GetTick();
-		  BSP_LED_Toggle(LED1);
-	  }
+		  flagPB = 0;
+		  if(BSP_PB_GetState(BUTTON_WAKEUP)==1)
+		  BSP_LED_Toggle(LED_GREEN);
+	  }*/
 
 	  //LED blinking each 1 second (1000 ms)
 	  if(HAL_GetTick() >= init_tick_led2 + 1000)
 	  {
 		  init_tick_led2 = HAL_GetTick();
-		  BSP_LED_Toggle(LED2);
+		  BSP_LED_Toggle(LED_RED);
 	  }
     /* USER CODE END WHILE */
 
@@ -929,6 +895,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOI_CLK_ENABLE();
   __HAL_RCC_GPIOF_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOJ_CLK_ENABLE();
 
   /*Configure GPIO pin : PI13 */
@@ -936,6 +903,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOI, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PA0 */
+  GPIO_InitStruct.Pin = GPIO_PIN_0;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
