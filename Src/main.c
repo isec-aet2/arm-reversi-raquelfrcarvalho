@@ -37,6 +37,9 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define SIZE					8
+#define X0						56
+#define Y0						24
 #define SQUARE                	BSP_LCD_GetYSize()/10
 #define MAX_CONVERTED_VALUE   	4095    /* Max converted value */
 #define AMBIENT_TEMP            25    /* Ambient Temperature */
@@ -59,6 +62,7 @@ DSI_HandleTypeDef hdsi;
 
 LTDC_HandleTypeDef hltdc;
 
+TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim6;
 TIM_HandleTypeDef htim7;
 
@@ -67,13 +71,15 @@ SDRAM_HandleTypeDef hsdram1;
 /* USER CODE BEGIN PV */
 TS_StateTypeDef TS_State;
 volatile uint8_t flagTS = 0;
+volatile uint8_t flagT2 = 0;
 volatile uint8_t flagT6 = 0;
 volatile uint8_t flagT7 = 0;
 
 volatile uint8_t counter = 0;
+volatile uint8_t counterT2 = 20;
 volatile uint8_t counterT6 = 0;
 volatile uint8_t counterT7 = 0;
-volatile uint8_t counterPlayer = 0;
+volatile uint8_t counterTS = 0;
 
 volatile long int JTemp = 0; //Internal Temperature converted
 volatile uint32_t ConvertedValue; //Value to convert internal temperature
@@ -81,7 +87,8 @@ char string[100];
 
 volatile int posX;
 volatile int posY;
-
+volatile int x0 = X0;
+volatile int y0 = Y0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -92,6 +99,7 @@ static void MX_DMA2D_Init(void);
 static void MX_DSIHOST_DSI_Init(void);
 static void MX_FMC_Init(void);
 static void MX_LTDC_Init(void);
+static void MX_TIM2_Init(void);
 static void MX_TIM6_Init(void);
 static void MX_TIM7_Init(void);
 /* USER CODE BEGIN PFP */
@@ -109,7 +117,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 		if(GPIO_Pin == GPIO_PIN_13)
 		{
 			BSP_TS_GetState(&TS_State);
-			counterPlayer = 1;
+			counterTS = 1;
 		}
 		flagTS = 1;
 	}
@@ -134,46 +142,73 @@ void HAL_TIM_PeriodElapsedCallback (TIM_HandleTypeDef *htim)
 		counterT7++;
 		flagT7 = 1;
 	}
+
+	if(htim->Instance == TIM2)
+	{
+		counterT2--;
+		flagT2 = 1;
+	}
 }
 
 void gameboard()
 {
-	  for(int i = 0; i<8; i++)
+	  for(int i = 0; i<SIZE; i++)
 	  {
 		  int xPosition = BSP_LCD_GetXSize()/10 + i * SQUARE;
 
-		  for(int j = 0; j<8; j++)
+		  for(int j = 0; j<SIZE; j++)
 		  {
 			  int yPosition = SQUARE + j * SQUARE;
 			  BSP_LCD_DrawRect(xPosition, yPosition, SQUARE, SQUARE);
 			  BSP_LCD_SetTextColor(LCD_COLOR_DARKGRAY);
 			  BSP_LCD_FillRect(xPosition, yPosition, SQUARE-2, SQUARE-2);
+			  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
 		  }
 	  }
 }
 
 void inicialPosition()
 {
-	posX = SQUARE + 56;
-	posY = SQUARE + 24;
-
 	//Ball player 1 (X and Y)
 	BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-	BSP_LCD_FillCircle(posX+SQUARE*4, posY+SQUARE*4, 16);
-	BSP_LCD_DrawCircle(posX+SQUARE*4, posY+SQUARE*4, 21);
-	BSP_LCD_FillCircle(posX+SQUARE*3, posY+SQUARE*3, 16);
-	BSP_LCD_DrawCircle(posX+SQUARE*3, posY+SQUARE*3, 21);
+	BSP_LCD_FillCircle(x0+SQUARE*5, y0+SQUARE*5, 16);
+	BSP_LCD_DrawCircle(x0+SQUARE*5, y0+SQUARE*5, 21);
+	BSP_LCD_FillCircle(x0+SQUARE*4, y0+SQUARE*4, 16);
+	BSP_LCD_DrawCircle(x0+SQUARE*4, y0+SQUARE*4, 21);
 	BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
 
 	//Ball player 2 (X and Y)
 	BSP_LCD_SetTextColor(LCD_COLOR_LIGHTRED);
-	BSP_LCD_FillCircle(posX+SQUARE*3, posY+SQUARE*4, 16);
-	BSP_LCD_DrawCircle(posX+SQUARE*3, posY+SQUARE*4, 21);
-	BSP_LCD_FillCircle(posX+SQUARE*4, posY+SQUARE*3, 16);
-	BSP_LCD_DrawCircle(posX+SQUARE*4, posY+SQUARE*3, 21);
+	BSP_LCD_FillCircle(x0+SQUARE*4, y0+SQUARE*5, 16);
+	BSP_LCD_DrawCircle(x0+SQUARE*4, y0+SQUARE*5, 21);
+	BSP_LCD_FillCircle(x0+SQUARE*5, y0+SQUARE*4, 16);
+	BSP_LCD_DrawCircle(x0+SQUARE*5, y0+SQUARE*4, 21);
+	BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
 }
 
 void placePieces(uint16_t x, uint16_t y)
+{
+    flagTS=0;
+
+    if(TS_State.touchX[0]>=(x0) && TS_State.touchY[0]>=(y0) && TS_State.touchX[0]<=x0+SQUARE*SIZE && TS_State.touchY[0]<=y0+SQUARE*SIZE)
+	{
+        for(int i=0; i<=SIZE; i++)
+		{
+			for(int j=0; j<=SIZE; j++)
+			{
+				if((TS_State.touchX[0]) > SQUARE*i && (TS_State.touchX[0]) <= SQUARE*(i+1) &&
+					(TS_State.touchY[0]) > SQUARE*j && (TS_State.touchY[0]) <= SQUARE*(j+1))
+				{
+					posX = x0+SQUARE*i;
+					posY = y0+SQUARE*j;
+					i = SIZE;
+					j = SIZE;
+				}
+			}
+		}
+	}
+}
+/*void placePieces(uint16_t x, uint16_t y)
 {
 		if(x > SQUARE*1 && x <= SQUARE*2)
 			posX = SQUARE*1 + 56;
@@ -208,7 +243,7 @@ void placePieces(uint16_t x, uint16_t y)
 			posY = SQUARE*7 + 24;
 		else if(y > SQUARE*8 && y <= SQUARE*9)
 			posY = SQUARE*8 + 24;
-}
+}*/
 
 /* USER CODE END 0 */
 
@@ -251,6 +286,7 @@ int main(void)
   MX_DSIHOST_DSI_Init();
   MX_FMC_Init();
   MX_LTDC_Init();
+  MX_TIM2_Init();
   MX_TIM6_Init();
   MX_TIM7_Init();
   /* USER CODE BEGIN 2 */
@@ -261,10 +297,12 @@ int main(void)
   BSP_TS_Init(BSP_LCD_GetXSize(),BSP_LCD_GetYSize()); //Configs Touch Screen
   BSP_TS_ITConfig();
   HAL_ADC_Start_IT(&hadc1);
+  HAL_TIM_Base_Start_IT(&htim2);
   HAL_TIM_Base_Start_IT(&htim6);
   HAL_TIM_Base_Start_IT(&htim7);
   gameboard();
   inicialPosition();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -273,9 +311,31 @@ int main(void)
 	int init_tick_led1= HAL_GetTick();
 	int init_tick_led2= HAL_GetTick();
 
-	//jogador ^= 1; 				0^0 = 1     1^1 = 0
   while (1)
   {
+	  if(flagT2)
+	  {
+		  //HAL_Delay(100);
+
+		  flagT2 = 0;
+
+		  if(counterT2 >= 0 && counterT2 <= 20 )
+		  {
+		  //Show time in seconds
+			  if(counterT2<10)
+				  sprintf(string, "Play Time:  %d s", counterT2);
+			  else
+				  sprintf(string, "Play Time: %d s", counterT2);
+
+		  BSP_LCD_SetTextColor(LCD_COLOR_DARKGRAY);
+		  BSP_LCD_SetFont(&Font16);
+		  BSP_LCD_DisplayStringAt(0, BSP_LCD_GetYSize()/2 - 180, (uint8_t *)string, RIGHT_MODE);
+		  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+		  }
+		  else if(counterT2<0)
+			  counter = 20;
+	  }
+
 	  if(flagT6)
 	  {
 		  flagT6 = 0;
@@ -297,7 +357,7 @@ int main(void)
 		  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
 	  }
 
-	  if(counterPlayer)
+	  if(counterTS)
 	  {
 		  HAL_Delay(50);
 
@@ -317,12 +377,11 @@ int main(void)
 				  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
 				  BSP_LCD_FillCircle(posX, posY, 16);
 				  BSP_LCD_DrawCircle(posX, posY, 21);
-				  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
 			  }
 			  counter++;
 		  }
 		  flagTS = 0;
-		  counterPlayer = 0;
+		  counterTS = 0;
 	  }
 
 	  //LED blinking each 0.5 second (500 ms)
@@ -339,6 +398,7 @@ int main(void)
 		  BSP_LED_Toggle(LED2);
 	  }
     /* USER CODE END WHILE */
+
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -685,6 +745,51 @@ static void MX_LTDC_Init(void)
 }
 
 /**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 9999;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 9999;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV4;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
+
+}
+
+/**
   * @brief TIM6 Initialization Function
   * @param None
   * @retval None
@@ -866,7 +971,6 @@ static void LCD_Config(void)
   BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
   BSP_LCD_SetBackColor(LCD_COLOR_LIGHTRED);
   BSP_LCD_SetFont(&Font24);
-
   BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
   BSP_LCD_FillRect(BSP_LCD_GetXSize()/10, BSP_LCD_GetYSize()/10, 400, 400);
   BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
