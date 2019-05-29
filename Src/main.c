@@ -20,6 +20,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "fatfs.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -38,8 +39,9 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define SIZE					8
-#define POS0					BSP_LCD_GetYSize()/20
 #define SQUARE                	BSP_LCD_GetYSize()/10
+#define BALL					16
+#define CIRCLE					21
 #define MAX_CONVERTED_VALUE   	4095    /* Max converted value */
 #define AMBIENT_TEMP            25    /* Ambient Temperature */
 #define VSENS_AT_AMBIENT_TEMP  	760    /* VSENSE value (mv) at ambient temperature */
@@ -57,6 +59,7 @@ ADC_HandleTypeDef hadc1;
 DMA2D_HandleTypeDef hdma2d;
 DSI_HandleTypeDef hdsi;
 LTDC_HandleTypeDef hltdc;
+SD_HandleTypeDef hsd2;
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim6;
 TIM_HandleTypeDef htim7;
@@ -72,18 +75,20 @@ volatile uint8_t flagT6 = 0;
 volatile uint8_t flagT7 = 0;
 
 volatile uint8_t counter = 0;
+volatile uint8_t counterPlayer = 0;
 volatile uint8_t counterT2 = 20;
 volatile uint8_t counterT6 = 0;
 volatile uint8_t counterT7 = 0;
 volatile uint8_t counterTS = 0;
 
+
 volatile long int JTemp = 0; //Internal Temperature converted
 volatile uint32_t ConvertedValue; //Value to convert internal temperature
 char string[100];
-int board [SIZE][SIZE];
+volatile int board [SIZE][SIZE] = {0};
 
-volatile int posX;
-volatile int posY;
+volatile uint16_t posX;
+volatile uint16_t posY;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -94,6 +99,7 @@ static void MX_DMA2D_Init(void);
 static void MX_DSIHOST_DSI_Init(void);
 static void MX_FMC_Init(void);
 static void MX_LTDC_Init(void);
+static void MX_SDMMC2_SD_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_TIM6_Init(void);
 static void MX_TIM7_Init(void);
@@ -102,7 +108,6 @@ static void LCD_Config();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
-/* USER CODE BEGIN 0 */
 /* USER CODE BEGIN 0 */
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
@@ -116,17 +121,15 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 		}
 		flagTS = 1;
 	}
-
-	/*if(flagPB == 0) //PB - push button
+	/*if(flagPB == 0)
 	{
 		if(GPIO_Pin == GPIO_PIN_0)
 		{
-			BSP_PB_GetState(BUTTON_WAKEUP);
+			BSP_LED_Toggle(LED_GREEN);
 		}
 		flagPB = 1;
 	}*/
 }
-
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* adcHandle)
 {
 	if(adcHandle == &hadc1)
@@ -154,6 +157,31 @@ void HAL_TIM_PeriodElapsedCallback (TIM_HandleTypeDef *htim)
 	}
 }
 
+void displayGame()
+{
+	// Box Play Game
+	 BSP_LCD_SetTextColor(LCD_COLOR_LIGHTRED);
+	 BSP_LCD_FillRect(BSP_LCD_GetYSize()-SIZE, BSP_LCD_GetYSize()/10, 320, BSP_LCD_GetYSize()-2*SQUARE);
+	 BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+	 BSP_LCD_FillRect(BSP_LCD_GetYSize()-SIZE+2, BSP_LCD_GetYSize()/10+2, 316, BSP_LCD_GetYSize()-2*SQUARE-4);
+
+	 BSP_LCD_SetTextColor(LCD_COLOR_LIGHTRED);
+	 BSP_LCD_SetBackColor(LCD_COLOR_WHITE);
+	 BSP_LCD_FillRect(BSP_LCD_GetYSize()-SIZE+4, BSP_LCD_GetYSize()/10+4, 312, 45);
+	 BSP_LCD_SetFont(&Font20);
+	 BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+	 BSP_LCD_SetBackColor(LCD_COLOR_LIGHTRED);
+	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+100, BSP_LCD_GetYSize()/10+20, (uint8_t *)"Play Game", LEFT_MODE);
+	 BSP_LCD_SetTextColor(LCD_COLOR_LIGHTRED);
+
+	 BSP_LCD_SetBackColor(LCD_COLOR_WHITE);
+	 BSP_LCD_FillRect(BSP_LCD_GetYSize()-SIZE+4, BSP_LCD_GetYSize()/10+335, 312, 45);
+	 BSP_LCD_SetFont(&Font20);
+	 BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+	 BSP_LCD_SetBackColor(LCD_COLOR_LIGHTRED);
+	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+100, BSP_LCD_GetYSize()/10+350, (uint8_t *)"Quit Game", LEFT_MODE);
+}
+
 void gameboard()
 {
 	  for(int i = 0; i<SIZE; i++)
@@ -175,44 +203,137 @@ void inicialPosition()
 {
 	//Ball player 1 (X and Y)
 	BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-	BSP_LCD_FillCircle(POS0+SQUARE*5, POS0+SQUARE*5, 16);
-	BSP_LCD_DrawCircle(POS0+SQUARE*5, POS0+SQUARE*5, 21);
-	BSP_LCD_FillCircle(POS0+SQUARE*4, POS0+SQUARE*4, 16);
-	BSP_LCD_DrawCircle(POS0+SQUARE*4, POS0+SQUARE*4, 21);
+	BSP_LCD_FillCircle(SQUARE/2+SQUARE*5, SQUARE/2+SQUARE*5, BALL);
+	BSP_LCD_DrawCircle(SQUARE/2+SQUARE*5, SQUARE/2+SQUARE*5, CIRCLE);
+	BSP_LCD_FillCircle(SQUARE/2+SQUARE*4, SQUARE/2+SQUARE*4, BALL);
+	BSP_LCD_DrawCircle(SQUARE/2+SQUARE*4, SQUARE/2+SQUARE*4, CIRCLE);
 	BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
 
 	//Ball player 2 (X and Y)
 	BSP_LCD_SetTextColor(LCD_COLOR_LIGHTRED);
-	BSP_LCD_FillCircle(POS0+SQUARE*4, POS0+SQUARE*5, 16);
-	BSP_LCD_DrawCircle(POS0+SQUARE*4, POS0+SQUARE*5, 21);
-	BSP_LCD_FillCircle(POS0+SQUARE*5, POS0+SQUARE*4, 16);
-	BSP_LCD_DrawCircle(POS0+SQUARE*5, POS0+SQUARE*4, 21);
+	BSP_LCD_FillCircle(SQUARE/2+SQUARE*4, SQUARE/2+SQUARE*5, BALL);
+	BSP_LCD_DrawCircle(SQUARE/2+SQUARE*4, SQUARE/2+SQUARE*5, CIRCLE);
+	BSP_LCD_FillCircle(SQUARE/2+SQUARE*5, SQUARE/2+SQUARE*4, BALL);
+	BSP_LCD_DrawCircle(SQUARE/2+SQUARE*5, SQUARE/2+SQUARE*4, CIRCLE);
 	BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+
+	board[5][5] = 1;
+	board[4][4] = 1;
+	board[4][5] = 1;
+	board[5][4] = 1;
+}
+
+void swapPlayer(uint16_t x, uint16_t y)
+{
+	  if(counterPlayer%2 == 0)
+	  {
+		  BSP_LCD_SetTextColor(LCD_COLOR_LIGHTRED);
+		  BSP_LCD_FillCircle(posX, posY, BALL);
+		  BSP_LCD_DrawCircle(posX, posY, CIRCLE);
+		  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+	  }
+	  else
+	  {
+		  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+		  BSP_LCD_FillCircle(posX, posY, BALL);
+		  BSP_LCD_DrawCircle(posX, posY, CIRCLE);
+		  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+	  }
 }
 
 void placePieces(uint16_t x, uint16_t y)
 {
     flagTS=0;
 
-    if(TS_State.touchX[0]>=(POS0) && TS_State.touchY[0]>=(POS0) && TS_State.touchX[0]<= POS0 + SQUARE*SIZE && TS_State.touchY[0]<= POS0 + SQUARE*SIZE)
+    if(TS_State.touchX[0]>=SQUARE && TS_State.touchY[0]>=SQUARE &&
+    		TS_State.touchX[0]< SQUARE + SQUARE*SIZE && TS_State.touchY[0]< SQUARE + SQUARE*SIZE)
 	{
-        for(int i=1; i<=SIZE; i++)
+        for(int i=0; i<=SIZE; i++)
 		{
-			for(int j=1; j<=SIZE; j++)
+			for(int j=0; j<=SIZE; j++)
 			{
-				if((TS_State.touchX[0]) > SQUARE*i && (TS_State.touchX[0]) <= SQUARE*(i+1) &&
-					(TS_State.touchY[0]) > SQUARE*j && (TS_State.touchY[0]) <= SQUARE*(j+1))
+				if(board[i][j] == 0)
 				{
-					posX = POS0+SQUARE*i;
-					posY = POS0+SQUARE*j;
-					i = SIZE;
-					j = SIZE;
+					if((TS_State.touchX[0]) > SQUARE*i && (TS_State.touchX[0]) <= SQUARE*(i+1) &&
+					(TS_State.touchY[0]) > SQUARE*j && (TS_State.touchY[0]) <= SQUARE*(j+1))
+					{
+						posX = SQUARE/2+SQUARE*i;
+						posY = SQUARE/2+SQUARE*j;
+						board[i][j] = 1;
+					}
 				}
 			}
 		}
 	}
+		swapPlayer(posX, posY);
+		counterPlayer++;
 }
 
+void playerTime() //Time for each player decide where to put the piece: 20s
+{
+	  if(flagT2)
+	  {
+		  flagT2 = 0;
+
+		  if(counterT2 >= 0 && counterT2 <= 20 )
+		  {
+		  //Show time in seconds
+			  if(counterT2<10)
+				  sprintf(string, "Play Time:  %d s", counterT2);
+			  else
+				  sprintf(string, "Play Time: %d s", counterT2);
+
+		  BSP_LCD_SetTextColor(LCD_COLOR_DARKGRAY);
+		  BSP_LCD_SetFont(&Font16);
+		  BSP_LCD_DisplayStringAt(0, BSP_LCD_GetYSize()/2 - 140, (uint8_t *)string, RIGHT_MODE);
+		  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+		  }
+		  else if(counterT2<0)
+			  counter = 20;
+	  }
+}
+
+void gameTime() //Total time of the game
+{
+	if(flagT6)
+	{
+		  flagT6 = 0;
+		  //Show time in seconds
+		  sprintf(string, "Time: %d s", counterT6);
+		  BSP_LCD_SetFont(&Font12);
+		  BSP_LCD_DisplayStringAt(0, BSP_LCD_GetYSize()/2 - 214, (uint8_t *)string, RIGHT_MODE);
+		  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+	}
+}
+
+void temperature() //internal temperature of the ARM
+{
+	if(flagT7)
+	{
+		  flagT7 = 0;
+		  JTemp = ((((ConvertedValue * VREF)/MAX_CONVERTED_VALUE) - VSENS_AT_AMBIENT_TEMP) * 10 / AVG_SLOPE) + AMBIENT_TEMP;
+		  //Show temperature in celsius
+		  sprintf(string, "Temp: %ld C", JTemp);
+		  BSP_LCD_SetFont(&Font12);
+		  BSP_LCD_DisplayStringAt(0, BSP_LCD_GetYSize()/2 - 232, (uint8_t *)string, RIGHT_MODE);
+		  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+	}
+}
+
+void detectTS()
+{
+	  if(counterTS)
+	  {
+		  HAL_Delay(50);
+
+		  if(TS_State.touchX[0] < BSP_LCD_GetYSize())
+		  {
+			  placePieces(TS_State.touchX[0], TS_State.touchY[0]);
+		  }
+		  flagTS = 0;
+		  counterTS = 0;
+	  }
+}
 /* USER CODE END 0 */
 
 /**
@@ -254,11 +375,12 @@ int main(void)
   MX_DSIHOST_DSI_Init();
   MX_FMC_Init();
   MX_LTDC_Init();
+  MX_SDMMC2_SD_Init();
   MX_TIM2_Init();
   MX_TIM6_Init();
   MX_TIM7_Init();
+  MX_FATFS_Init();
   /* USER CODE BEGIN 2 */
-  //BSP_PB_Init(BUTTON_WAKEUP, BUTTON_MODE_EXTI); //Button to use to go back to the menu
   BSP_LED_Init(LED_GREEN);
   BSP_LED_Init(LED_RED);
   LCD_Config();
@@ -268,8 +390,10 @@ int main(void)
   HAL_TIM_Base_Start_IT(&htim2);
   HAL_TIM_Base_Start_IT(&htim6);
   HAL_TIM_Base_Start_IT(&htim7);
+  displayGame();
   gameboard();
   inicialPosition();
+
 
   /* USER CODE END 2 */
 
@@ -280,74 +404,10 @@ int main(void)
 
   while (1)
   {
-	  if(flagT2)
-	  {
-		  flagT2 = 0;
-
-		  if(counterT2 >= 0 && counterT2 <= 20 )
-		  {
-		  //Show time in seconds
-			  if(counterT2<10)
-				  sprintf(string, "Play Time:  %d s", counterT2);
-			  else
-				  sprintf(string, "Play Time: %d s", counterT2);
-
-		  BSP_LCD_SetTextColor(LCD_COLOR_DARKGRAY);
-		  BSP_LCD_SetFont(&Font16);
-		  BSP_LCD_DisplayStringAt(0, BSP_LCD_GetYSize()/2 - 180, (uint8_t *)string, RIGHT_MODE);
-		  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-		  }
-		  else if(counterT2<0)
-			  counter = 20;
-	  }
-
-	  if(flagT6)
-	  {
-		  flagT6 = 0;
-		  //Show time in seconds
-		  sprintf(string, "Time: %d s", counterT6);
-		  BSP_LCD_SetFont(&Font12);
-		  BSP_LCD_DisplayStringAt(0, BSP_LCD_GetYSize()/2 - 214, (uint8_t *)string, RIGHT_MODE);
-		  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-	  }
-
-	  if(flagT7)
-	  {
-		  flagT7 = 0;
-		  JTemp = ((((ConvertedValue * VREF)/MAX_CONVERTED_VALUE) - VSENS_AT_AMBIENT_TEMP) * 10 / AVG_SLOPE) + AMBIENT_TEMP;
-		  //Show temperature in celsius
-		  sprintf(string, "Temp: %ld C", JTemp);
-		  BSP_LCD_SetFont(&Font12);
-		  BSP_LCD_DisplayStringAt(0, BSP_LCD_GetYSize()/2 - 232, (uint8_t *)string, RIGHT_MODE);
-		  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-	  }
-
-	  if(counterTS)
-	  {
-		  HAL_Delay(50);
-
-		  if(TS_State.touchX[0] < BSP_LCD_GetYSize())
-		  {
-			  placePieces(TS_State.touchX[0], TS_State.touchY[0]);
-
-			  if(counter%2 == 0)
-			  {
-				  BSP_LCD_SetTextColor(LCD_COLOR_LIGHTRED);
-				  BSP_LCD_FillCircle(posX, posY, 16);
-				  BSP_LCD_DrawCircle(posX, posY, 21);
-				  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-			  }
-			  else
-			  {
-				  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-				  BSP_LCD_FillCircle(posX, posY, 16);
-				  BSP_LCD_DrawCircle(posX, posY, 21);
-			  }
-			  counter++;
-		  }
-		  flagTS = 0;
-		  counterTS = 0;
-	  }
+	  playerTime();
+	  gameTime();
+	  temperature();
+	  detectTS();
 
 	  //LED blinking when push button is pressed
 	  /*if(flagPB)
@@ -393,7 +453,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLM = 25;
   RCC_OscInitStruct.PLL.PLLN = 400;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
-  RCC_OscInitStruct.PLL.PLLQ = 2;
+  RCC_OscInitStruct.PLL.PLLQ = 8;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -417,13 +477,16 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_LTDC;
+  PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_LTDC|RCC_PERIPHCLK_SDMMC2
+                              |RCC_PERIPHCLK_CLK48;
   PeriphClkInitStruct.PLLSAI.PLLSAIN = 192;
   PeriphClkInitStruct.PLLSAI.PLLSAIR = 2;
   PeriphClkInitStruct.PLLSAI.PLLSAIQ = 2;
   PeriphClkInitStruct.PLLSAI.PLLSAIP = RCC_PLLSAIP_DIV2;
   PeriphClkInitStruct.PLLSAIDivQ = 1;
   PeriphClkInitStruct.PLLSAIDivR = RCC_PLLSAIDIVR_2;
+  PeriphClkInitStruct.Clk48ClockSelection = RCC_CLK48SOURCE_PLL;
+  PeriphClkInitStruct.Sdmmc2ClockSelection = RCC_SDMMC2CLKSOURCE_CLK48;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -711,6 +774,34 @@ static void MX_LTDC_Init(void)
 }
 
 /**
+  * @brief SDMMC2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SDMMC2_SD_Init(void)
+{
+
+  /* USER CODE BEGIN SDMMC2_Init 0 */
+
+  /* USER CODE END SDMMC2_Init 0 */
+
+  /* USER CODE BEGIN SDMMC2_Init 1 */
+
+  /* USER CODE END SDMMC2_Init 1 */
+  hsd2.Instance = SDMMC2;
+  hsd2.Init.ClockEdge = SDMMC_CLOCK_EDGE_RISING;
+  hsd2.Init.ClockBypass = SDMMC_CLOCK_BYPASS_DISABLE;
+  hsd2.Init.ClockPowerSave = SDMMC_CLOCK_POWER_SAVE_DISABLE;
+  hsd2.Init.BusWide = SDMMC_BUS_WIDE_1B;
+  hsd2.Init.HardwareFlowControl = SDMMC_HARDWARE_FLOW_CONTROL_DISABLE;
+  hsd2.Init.ClockDiv = 0;
+  /* USER CODE BEGIN SDMMC2_Init 2 */
+
+  /* USER CODE END SDMMC2_Init 2 */
+
+}
+
+/**
   * @brief TIM2 Initialization Function
   * @param None
   * @retval None
@@ -890,8 +981,8 @@ static void MX_GPIO_Init(void)
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOE_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
-  __HAL_RCC_GPIOG_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
+  __HAL_RCC_GPIOG_CLK_ENABLE();
   __HAL_RCC_GPIOI_CLK_ENABLE();
   __HAL_RCC_GPIOF_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
@@ -904,6 +995,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOI, &GPIO_InitStruct);
 
+  /*Configure GPIO pin : PI15 */
+  GPIO_InitStruct.Pin = GPIO_PIN_15;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOI, &GPIO_InitStruct);
+
   /*Configure GPIO pin : PA0 */
   GPIO_InitStruct.Pin = GPIO_PIN_0;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
@@ -911,6 +1008,9 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI0_IRQn);
+
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
