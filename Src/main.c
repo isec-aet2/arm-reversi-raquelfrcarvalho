@@ -131,12 +131,12 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 	{
 		if(GPIO_Pin == GPIO_PIN_0)
 		{
-			BSP_LED_Toggle(LED_GREEN);
-			//gameInfo();
+			BSP_LED_Toggle(LED_RED);
 		}
 		flagPB = 1;
 	}
 }
+
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* adcHandle)
 {
 	if(adcHandle == &hadc1)
@@ -255,10 +255,10 @@ void inicialPosition()
 	BSP_LCD_DrawCircle(SQUARE/2+SQUARE*5, SQUARE/2+SQUARE*4, CIRCLE);
 	BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
 
-	board[5][5] = 1;
+	board[3][3] = 1;
+	board[3][4] = 1;
+	board[4][3] = 1;
 	board[4][4] = 1;
-	board[4][5] = 1;
-	board[5][4] = 1;
 }
 
 void playerTime() //Time for each player decide where to put the piece: 20s
@@ -335,20 +335,18 @@ void placePieces(uint16_t x, uint16_t y)
     int i=0;
     int j=0;
 
-    if((TS_State.touchX[0] >= SQUARE) && (TS_State.touchY[0] >= SQUARE) &&
-    		(TS_State.touchX[0] <= (SQUARE*(SIZE+1))) && (TS_State.touchY[0] <= (SQUARE*(SIZE+1))))
+    if((TS_State.touchX[0] >= SQUARE) && (TS_State.touchY[0] >= SQUARE) && (TS_State.touchX[0] <= (SQUARE*(SIZE+1))) && (TS_State.touchY[0] <= (SQUARE*(SIZE+1))))
     {
-        for(i=1; i<=SIZE; i++)
+        for(i=0; i<SIZE; i++)
 		{
-			for(j=1; j<=SIZE; j++)
+			for(j=0; j<SIZE; j++)
 			{
 			    if(board[i][j] == 0)
 			    {
-					if((TS_State.touchX[0] > SQUARE*i) && (TS_State.touchX[0] <= SQUARE*(i+1)) &&
-					(TS_State.touchY[0] > SQUARE*j) && (TS_State.touchY[0] <= SQUARE*(j+1)))
+					if((TS_State.touchX[0] > SQUARE*(i+1)) && (TS_State.touchX[0] <= SQUARE*(i+2)) && (TS_State.touchY[0] > SQUARE*(j+1)) && (TS_State.touchY[0] <= SQUARE*(j+2)))
 					{
-						posX = SQUARE/2 + SQUARE*i;
-						posY = SQUARE/2 + SQUARE*j;
+						posX = SQUARE/2 + SQUARE*(i+1);
+						posY = SQUARE/2 + SQUARE*(j+1);
 						board[i][j] = 1;
 					}
 			    }
@@ -386,6 +384,40 @@ void temperature() //internal temperature of the ARM
 	}
 }
 
+void writeSDcard()
+{
+	char sdBuffer[64];
+	FRESULT ret = FR_OK;
+
+	ret = f_mount(&SDFatFS, SDPath, 0);
+	if(ret != FR_OK)
+	{
+		Error_Handler();
+	}
+	HAL_Delay(200);
+
+	ret = f_open (&SDFile, "ads.txt", FA_OPEN_APPEND | FA_WRITE);
+	if (ret != FR_OK)
+	{
+		Error_Handler();
+	}
+
+	memset(sdBuffer, '\0', 64 * sizeof(char));
+	sprintf(sdBuffer, "Internal Temperature is %ld degree C \n", JTemp);
+
+	ret = f_write(&SDFile, sdBuffer, strlen(sdBuffer), &nBytes);
+	if (ret != FR_OK)
+	{
+		Error_Handler();
+	}
+
+	ret = f_close(&SDFile);
+	if (ret != FR_OK)
+	{
+		Error_Handler();
+	}
+}
+
 void detectTS()//Interrupt Touch Screen
 {
 	  if(counterTS)
@@ -400,13 +432,14 @@ void detectTS()//Interrupt Touch Screen
 		  counterTS = 0;
 	  }
 }
+
 /* USER CODE END 0 */
 
 /**
   * @brief  The application entry point.
   * @retval int
   */
-int main(void)
+int main(void)	//TODO: MAIN
 {
   /* USER CODE BEGIN 1 */
   /* USER CODE END 1 */
@@ -456,18 +489,17 @@ int main(void)
   HAL_TIM_Base_Start_IT(&htim2);
   HAL_TIM_Base_Start_IT(&htim6);
   HAL_TIM_Base_Start_IT(&htim7);
+
   gameInfo();
   gameboard();
   inicialPosition();
   printPlayer();
 
+  /* OPEN/CREATE THE FILE MODE APPEND */
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-
-	int init_tick_led2= HAL_GetTick();
-
   while (1)
   {
 	  playerTime();
@@ -475,19 +507,11 @@ int main(void)
 	  temperature();
 	  detectTS();
 
-	  //LED blinking when push button is pressed
-	  /*if(flagPB)
+	  if(flagPB == 1)
 	  {
 		  flagPB = 0;
-		  if(BSP_PB_GetState(BUTTON_WAKEUP)==1)
-		  BSP_LED_Toggle(LED_GREEN);
-	  }*/
 
-	  //LED blinking each 1 second (1000 ms)
-	  if(HAL_GetTick() >= init_tick_led2 + 1000)
-	  {
-		  init_tick_led2 = HAL_GetTick();
-		  BSP_LED_Toggle(LED_RED);
+		  writeSDcard();
 	  }
     /* USER CODE END WHILE */
 
@@ -1122,7 +1146,11 @@ void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
-
+    while(1)
+    {
+        BSP_LED_Toggle(LED_GREEN);
+        HAL_Delay(250);
+    }
   /* USER CODE END Error_Handler_Debug */
 }
 
