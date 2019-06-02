@@ -34,7 +34,7 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-	typedef enum {MENU, ONEPLAYER, TWOPLAYERS} options;
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -79,13 +79,15 @@ TIM_HandleTypeDef htim7;
 SDRAM_HandleTypeDef hsdram1;
 
 /* USER CODE BEGIN PV */
-
+TS_StateTypeDef TS_State;
 volatile uint8_t flagTS = 0;
 volatile uint8_t flagPB = 0;
+volatile uint8_t flagMenu = 0;
 volatile uint8_t flagT2 = 0;
 volatile uint8_t flagT6 = 0;
 volatile uint8_t flagT7 = 0;
-
+volatile uint8_t flagOnePlayer = 0;
+volatile uint8_t flagTwoPlayers = 0;
 volatile uint8_t counter = 0;
 volatile uint8_t counterPlayer = 0;
 volatile uint8_t counterT2 = 20;
@@ -93,18 +95,19 @@ volatile uint8_t counterT6 = 0;
 volatile uint8_t counterT7 = 0;
 volatile uint8_t counterTS = 0;
 
-volatile long int JTemp = 0; //Internal Temperature converted
-volatile uint32_t ConvertedValue; //Value to convert internal temperature
+long int JTemp = 0; //Internal Temperature converted
+uint32_t ConvertedValue; //Value to convert internal temperature
 char string[100];
 volatile char board [SIZE][SIZE] = {0};
 volatile int nPlays = 0;
 volatile uint16_t posX;
 volatile uint16_t posY;
 unsigned int nBytes;
-int Xvalue;
-int Yvalue;
-
-TS_StateTypeDef TS_State;
+int valueX;
+int valueY;
+_Bool pf;
+int gf = 0;
+int pl = PLAYER1;
 
 /* USER CODE END PV */
 
@@ -122,38 +125,31 @@ static void MX_TIM6_Init(void);
 static void MX_TIM7_Init(void);
 /* USER CODE BEGIN PFP */
 static void LCD_Config();
-void startMenu();
-void virtualBoard();
-void gameboard();
-void gameInfo();
-void temperature(options);
-void gameTime();
-void playerTime();
-void placePieces();
-void writeSDcard();
-
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-options option = MENU;
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
 	if(GPIO_Pin == GPIO_PIN_13)
 	{
-		//touchOnce = 1;
-		flagTS = 1;
 		BSP_TS_GetState(&TS_State);
-		Xvalue = (int) TS_State.touchX[0];
-		Yvalue = (int) TS_State.touchY[0];
+		HAL_Delay(100);
+
+		if(TS_State.touchDetected)
+		{
+			flagTS = 1;
+			counterTS = 1;
+			valueX = TS_State.touchX[0];
+			valueY = TS_State.touchY[0];
+		}
 	}
 
 	if(GPIO_Pin == GPIO_PIN_0)
 	{
 		flagPB = 1;
 		BSP_LED_Toggle(LED_RED);
-		//option = MENU;
 	}
 }
 
@@ -184,6 +180,71 @@ void HAL_TIM_PeriodElapsedCallback (TIM_HandleTypeDef *htim)
 	}
 }
 
+//TIMERS - Player Timer, Total Game Time and Temperature each 2s
+void gameTime() //Total time of the game
+{
+	if(flagT6)
+	{
+	    int hh = 0, mm = 0, ss = 0;
+
+		flagT6 = 0;
+		//Show time in seconds
+		hh = counterT6 / 3600;
+		mm = (counterT6 - 3600*hh)/ 60;
+		ss = (counterT6 - 3600*hh - mm*60);
+		BSP_LCD_SetBackColor(LCD_COLOR_LIGHTRED);
+		sprintf(string, "Time: %2d:%2d:%2d", hh, mm, ss);
+		BSP_LCD_SetFont(&Font12);
+		BSP_LCD_DisplayStringAt(0, BSP_LCD_GetYSize()/2 - 214, (uint8_t *)string, RIGHT_MODE);
+		BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+	}
+}
+
+void playerTime() //Time for each player decide where to put the piece: 20s
+{
+	if(flagT2)
+	{
+		flagT2 = 0;
+
+		if(counterT2 >= 0 && counterT2 <= 20)
+		{
+		  //Show time in seconds
+
+			  BSP_LCD_SetBackColor(LCD_COLOR_WHITE);
+			  BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
+			  BSP_LCD_SetFont(&Font12);
+
+			  if(counterT2 < 10)
+				  sprintf(string, "TIMER     %d", counterT2);
+			  else
+				  sprintf(string, "TIMER    %d ", counterT2);
+
+			  BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+40, BSP_LCD_GetYSize()/10+140, (uint8_t *)string, LEFT_MODE);
+			  BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+195, BSP_LCD_GetYSize()/10+140, (uint8_t *)string, LEFT_MODE);
+			  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+		  }
+		  else if(counterT2)
+			  counter = 20;
+	}
+}
+
+void temperature() //internal temperature of the ARM
+{
+	if(flagT7)
+	{
+		flagT7 = 0;
+
+		JTemp = ((((ConvertedValue * VREF)/MAX_CONVERTED_VALUE) - VSENS_AT_AMBIENT_TEMP) * 10 / AVG_SLOPE) + AMBIENT_TEMP;
+		//Show temperature in celsius
+		BSP_LCD_SetBackColor(LCD_COLOR_LIGHTRED);
+		sprintf(string, "Temp: %ld C", JTemp);
+		BSP_LCD_SetFont(&Font12);
+		BSP_LCD_DisplayStringAt(0, BSP_LCD_GetYSize()/2 - 232, (uint8_t *)string, RIGHT_MODE);
+		BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+	}
+}
+
+//Layouts, Menu and Boards
 void startMenu()
 {
 	//BSP_LCD_DrawBitmap(0, 0, (uint8_t*) stlogo);
@@ -198,14 +259,17 @@ void startMenu()
 	BSP_LCD_SetFont(&Font24);
 	BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
 	BSP_LCD_SetBackColor(LCD_COLOR_LIGHTRED);
-	BSP_LCD_DisplayStringAt(318, 135, (uint8_t *)"ONE PLAYER", LEFT_MODE);
+	//BSP_LCD_DisplayStringAt(318, 135, (uint8_t *)"ONE PLAYER", LEFT_MODE);
 	BSP_LCD_DisplayStringAt(316, 320, (uint8_t *)"TWO PLAYERS", LEFT_MODE);
-	BSP_LCD_SetTextColor(LCD_COLOR_LIGHTRED);
-	BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+	BSP_LCD_DisplayStringAt(318, 135, (uint8_t *)"ONE PLAYER", LEFT_MODE);
 }
 
 void gameboard()
 {
+	  board[3][3] = PLAYER1;
+	  board[4][4] = PLAYER1;
+	  board[3][4] = PLAYER2;
+	  board[4][3] = PLAYER2;
 
 	  for(int i = 0; i<SIZE; i++)
 	  {
@@ -219,11 +283,17 @@ void gameboard()
 			  BSP_LCD_SetTextColor(LCD_COLOR_DARKGRAY);
 			  BSP_LCD_FillRect(xPosition, yPosition, SQUARE-2, SQUARE-2);
 			  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+
+
 		  }
 	  }
+//	  putPieces(3,3);
+//	  putPieces(4,4);
+//	  putPieces(3,4);
+//	  putPieces(4,3);
 }
 
-void virtualBoard()
+/*void virtualBoard()
 {
 	for(int i = 0; i < SIZE; i++)
 	{
@@ -237,76 +307,80 @@ void virtualBoard()
 	board[4][4] = PLAYER1;
 	board[3][4] = PLAYER2;
 	board[4][3] = PLAYER2;
-}
+}*/
 
 void gameInfo() //Board with game information (players, timers, scores)
 {
-	/* Set LCD Example description */
-	BSP_LCD_SetBackColor(LCD_COLOR_WHITE);
-	BSP_LCD_SetTextColor(LCD_COLOR_BLACK); //Rodapé
-	BSP_LCD_SetFont(&Font12);
-	BSP_LCD_DisplayStringAt(0, BSP_LCD_GetYSize()- 20, (uint8_t *)"Copyright (c) Oak Tree Company", CENTER_MODE);
+	 BSP_LCD_SetTextColor(LCD_COLOR_LIGHTRED);
+	 BSP_LCD_FillRect(BSP_LCD_GetYSize()-SIZE, BSP_LCD_GetYSize()/10, 320, BSP_LCD_GetYSize()-2*SQUARE);
+	 BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+	 BSP_LCD_FillRect(BSP_LCD_GetYSize()-SIZE+2, BSP_LCD_GetYSize()/10+2, 316, BSP_LCD_GetYSize()-2*SQUARE-4);
 
-	BSP_LCD_SetTextColor(LCD_COLOR_LIGHTRED);
-	BSP_LCD_FillRect(BSP_LCD_GetYSize()-SIZE, BSP_LCD_GetYSize()/10, 320, BSP_LCD_GetYSize()-2*SQUARE);
-	BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-	BSP_LCD_FillRect(BSP_LCD_GetYSize()-SIZE+2, BSP_LCD_GetYSize()/10+2, 316, BSP_LCD_GetYSize()-2*SQUARE-4);
+	 BSP_LCD_SetTextColor(LCD_COLOR_LIGHTRED);
+	 BSP_LCD_SetBackColor(LCD_COLOR_WHITE);
+	 BSP_LCD_FillRect(BSP_LCD_GetYSize()-SIZE+4, BSP_LCD_GetYSize()/10+4, 312, 45);
+	 BSP_LCD_SetFont(&Font16);
+	 BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+	 BSP_LCD_SetBackColor(LCD_COLOR_LIGHTRED);
+	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+70, BSP_LCD_GetYSize()/10+20, (uint8_t *)"GAME INFORMATION", LEFT_MODE);
+	 BSP_LCD_SetTextColor(LCD_COLOR_LIGHTRED);
 
-	BSP_LCD_SetTextColor(LCD_COLOR_LIGHTRED);
-	BSP_LCD_SetBackColor(LCD_COLOR_WHITE);
-	BSP_LCD_FillRect(BSP_LCD_GetYSize()-SIZE+4, BSP_LCD_GetYSize()/10+4, 312, 45);
-	BSP_LCD_SetFont(&Font16);
-	BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-	BSP_LCD_SetBackColor(LCD_COLOR_LIGHTRED);
-	BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+70, BSP_LCD_GetYSize()/10+20, (uint8_t *)"GAME INFORMATION", LEFT_MODE);
-	BSP_LCD_SetTextColor(LCD_COLOR_LIGHTRED);
-	BSP_LCD_SetBackColor(LCD_COLOR_WHITE);
-	BSP_LCD_FillRect(BSP_LCD_GetYSize()-SIZE+4, BSP_LCD_GetYSize()/10+325, 312, 55);
-	BSP_LCD_SetFont(&Font16);
-	BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
-	BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+35, BSP_LCD_GetYSize()/10+75, (uint8_t *)"PLAYER 1", LEFT_MODE);
-	BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+190, BSP_LCD_GetYSize()/10+75, (uint8_t *)"PLAYER 2", LEFT_MODE);
-	sprintf(string, "PIECES    ");
-	BSP_LCD_SetFont(&Font12);
-	BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
-	BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+40, BSP_LCD_GetYSize()/10+110, (uint8_t *)string, LEFT_MODE);
-	BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+195, BSP_LCD_GetYSize()/10+110, (uint8_t *)string, LEFT_MODE);
-	sprintf(string, "WINNER    ");
-	BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+40, BSP_LCD_GetYSize()/10+170, (uint8_t *)string, LEFT_MODE);
-	BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+195, BSP_LCD_GetYSize()/10+170, (uint8_t *)string, LEFT_MODE);
-	sprintf(string, "LOOSER    ");
-	BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+40, BSP_LCD_GetYSize()/10+200, (uint8_t *)string, LEFT_MODE);
-	BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+195, BSP_LCD_GetYSize()/10+200, (uint8_t *)string, LEFT_MODE);
-	sprintf(string, "SCORE     ");
-	BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+40, BSP_LCD_GetYSize()/10+230, (uint8_t *)string, LEFT_MODE);
-	BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+195, BSP_LCD_GetYSize()/10+230, (uint8_t *)string, LEFT_MODE);
-	BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-	BSP_LCD_SetFont(&Font16);
-	BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
-	BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+40, BSP_LCD_GetYSize()/10+300, (uint8_t *)"WINNER IS PLAYER X", LEFT_MODE);
-	BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+	 BSP_LCD_SetBackColor(LCD_COLOR_WHITE);
+	 BSP_LCD_FillRect(BSP_LCD_GetYSize()-SIZE+4, BSP_LCD_GetYSize()/10+325, 312, 55);
+	 BSP_LCD_SetFont(&Font16);
+	 BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
 
-	BSP_LCD_SetBackColor(LCD_COLOR_LIGHTRED);
-	BSP_LCD_SetFont(&Font16);
-	BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+105, BSP_LCD_GetYSize()/10+336, (uint8_t *)"QUIT GAME", LEFT_MODE);
-	BSP_LCD_SetFont(&Font12);
-	BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+100, BSP_LCD_GetYSize()/10+360, (uint8_t *)"Press Blue Button", LEFT_MODE);
+	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+35, BSP_LCD_GetYSize()/10+75, (uint8_t *)"PLAYER 1", LEFT_MODE);
+	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+190, BSP_LCD_GetYSize()/10+75, (uint8_t *)"PLAYER 2", LEFT_MODE);
+	 sprintf(string, "PIECES    ");
+	 BSP_LCD_SetFont(&Font12);
+	 BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
+	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+40, BSP_LCD_GetYSize()/10+110, (uint8_t *)string, LEFT_MODE);
+	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+195, BSP_LCD_GetYSize()/10+110, (uint8_t *)string, LEFT_MODE);
+	 sprintf(string, "WINNER    ");
+	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+40, BSP_LCD_GetYSize()/10+170, (uint8_t *)string, LEFT_MODE);
+	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+195, BSP_LCD_GetYSize()/10+170, (uint8_t *)string, LEFT_MODE);
+	 sprintf(string, "LOOSER    ");
+	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+40, BSP_LCD_GetYSize()/10+200, (uint8_t *)string, LEFT_MODE);
+	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+195, BSP_LCD_GetYSize()/10+200, (uint8_t *)string, LEFT_MODE);
+	 sprintf(string, "SCORE     ");
+	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+40, BSP_LCD_GetYSize()/10+230, (uint8_t *)string, LEFT_MODE);
+	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+195, BSP_LCD_GetYSize()/10+230, (uint8_t *)string, LEFT_MODE);
+	 BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+	 BSP_LCD_SetFont(&Font16);
+	 BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
+	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+40, BSP_LCD_GetYSize()/10+300, (uint8_t *)"WINNER IS PLAYER X", LEFT_MODE);
+	 BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
 
-	BSP_LCD_SetTextColor(LCD_COLOR_LIGHTRED);
-	BSP_LCD_DrawVLine(630, 95, 241);
-	BSP_LCD_DrawVLine(631, 95, 242);
-	BSP_LCD_DrawHLine(473, 335, 318);
-	BSP_LCD_DrawHLine(473, 336, 318);
-	BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+	 BSP_LCD_SetBackColor(LCD_COLOR_LIGHTRED);
+	 BSP_LCD_SetFont(&Font16);
+	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+105, BSP_LCD_GetYSize()/10+336, (uint8_t *)"QUIT GAME", LEFT_MODE);
+	 BSP_LCD_SetFont(&Font12);
+	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+100, BSP_LCD_GetYSize()/10+360, (uint8_t *)"Press Blue Button", LEFT_MODE);
 
-	BSP_LCD_SetTextColor(LCD_COLOR_LIGHTRED); //Header
-	BSP_LCD_FillRect(0, 0, BSP_LCD_GetXSize(), 45);
-	BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-	BSP_LCD_SetBackColor(LCD_COLOR_LIGHTRED);
-	BSP_LCD_SetFont(&Font24);
-	BSP_LCD_DisplayStringAt(0, 12, (uint8_t *)"WELCOME TO REVERSI", CENTER_MODE);
+	 BSP_LCD_SetTextColor(LCD_COLOR_LIGHTRED);
+	 BSP_LCD_DrawVLine(630, 95, 241);
+	 BSP_LCD_DrawVLine(631, 95, 242);
+	 BSP_LCD_DrawHLine(473, 335, 318);
+	 BSP_LCD_DrawHLine(473, 336, 318);
+	 BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
 }
 
+void swapPlayer()
+{
+
+
+	if(counterPlayer%2 == 0)
+	{
+		pl = PLAYER1;
+	}
+	else
+	{
+		pl = PLAYER2;
+	}
+}
+
+//Game and implemented rules
 void placePieces(void)
 {
 	  for(int i = 0; i<SIZE; i++)
@@ -336,113 +410,49 @@ void placePieces(void)
 	  }
 }
 
-void swapPlayer(uint16_t x, uint16_t y)
+void putPieces(uint16_t x, uint16_t y)
 {
-	if(counterPlayer%2 == 0)
-	{
-		BSP_LCD_SetTextColor(LCD_COLOR_LIGHTRED);
-		BSP_LCD_FillCircle(x, y, BALL);
-		BSP_LCD_DrawCircle(x, y, CIRCLE);
-		BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
 
-		BSP_LCD_SetFont(&Font16);
-		BSP_LCD_SetBackColor(LCD_COLOR_WHITE);
-		BSP_LCD_SetTextColor(LCD_COLOR_BLUE);
-		BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+190, BSP_LCD_GetYSize()/10+260, (uint8_t *)"YOUR TURN", LEFT_MODE); //Corrigir isto
-	}
-	else
-	{
-		BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-		BSP_LCD_FillCircle(x, y, BALL);
-		BSP_LCD_DrawCircle(x, y, CIRCLE);
-		BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-
-		//sprintf(string, "Player 1 turn");
-		BSP_LCD_SetFont(&Font16);
-		BSP_LCD_SetBackColor(LCD_COLOR_WHITE);
-		BSP_LCD_SetTextColor(LCD_COLOR_BLUE);
-		BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+35, BSP_LCD_GetYSize()/10+260, (uint8_t *)"YOUR TURN", LEFT_MODE); //Corrigir isto
-	}
-}
-
-void gameTime() //Total time of the game
-{
-	if(flagT6)
-	{
-		HAL_Delay(50);
-
-	    int hh = 0, mm = 0, ss = 0;
-
-		flagT6 = 0;
-		//Show time in seconds
-		hh = counterT6 / 3600;
-		mm = (counterT6 - 3600*hh)/ 60;
-		ss = (counterT6 - 3600*hh - mm*60);
-		BSP_LCD_SetBackColor(LCD_COLOR_LIGHTRED);
-		sprintf(string, "Time: %2d:%2d:%2d", hh, mm, ss);
-		BSP_LCD_SetFont(&Font12);
-		BSP_LCD_DisplayStringAt(0, BSP_LCD_GetYSize()/2 - 214, (uint8_t *)string, RIGHT_MODE);
-		BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-	}
-}
-
-void playerTime() //Time for each player decide where to put the piece: 20s
-{
-	if(flagT2)
-	{
-		HAL_Delay(75);
-
-		flagT2 = 0;
-
-		if(counterT2 >= 0 && counterT2 <= 20)
+	if(!flagMenu)
+    {if((x >= SQUARE) && (y >= SQUARE) && (x <= (SQUARE*(SIZE+1))) && (y <= (SQUARE*(SIZE+1))))
+    {
+        for(int i=0; i<SIZE; i++)
 		{
-		  //Show time in seconds
-
-			  BSP_LCD_SetBackColor(LCD_COLOR_WHITE);
-			  BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
-			  BSP_LCD_SetFont(&Font12);
-
-			  if(counterT2 < 10)
-				  sprintf(string, "TIMER     %d", counterT2);
-			  else
-				  sprintf(string, "TIMER    %d ", counterT2);
-
-			  BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+40, BSP_LCD_GetYSize()/10+140, (uint8_t *)string, LEFT_MODE);
-			  BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+195, BSP_LCD_GetYSize()/10+140, (uint8_t *)string, LEFT_MODE);
-		  }
-		  else if(counterT2)
-			  counter = 20;
+			for(int j=0; j<SIZE; j++)
+			{
+			    if(board[i][j] == 0)
+			    {
+					if((x > SQUARE*(i+1)) && (x <= SQUARE*(i+2)) && (y > SQUARE*(j+1)) && (y <= SQUARE*(j+2)))
+					{
+						posX = SQUARE/2 + SQUARE*(i+1);
+						posY = SQUARE/2 + SQUARE*(j+1);
+						board[i][j] = pl;
+					}
+			    }
+			}
+		}
+	}
+    counterPlayer++;
+	swapPlayer();
 	}
 }
-
-void temperature(options option) //internal temperature of the ARM
+int detectTS()//Interrupt Touch Screen
 {
-	if(flagT7)
-	{
-		flagT7 = 0;
 
-		JTemp = ((((ConvertedValue * VREF)/MAX_CONVERTED_VALUE)
-				- VSENS_AT_AMBIENT_TEMP) * 10 / AVG_SLOPE) + AMBIENT_TEMP;
-		//Show temperature in celsius
-	}
+	  if(flagTS)
+	  {
+		  flagTS = 0;
+		  HAL_Delay(100);
 
-	if (option == ONEPLAYER || option == TWOPLAYERS)
-	{
-		BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-		BSP_LCD_SetBackColor(LCD_COLOR_LIGHTRED);
-	}
-	else
-	{
-		BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-		BSP_LCD_SetBackColor(LCD_COLOR_BLACK);
-	}
 
-		sprintf(string, "Temp: %ld C", JTemp);
-		BSP_LCD_SetFont(&Font12);
-		BSP_LCD_DisplayStringAt(0, BSP_LCD_GetYSize()/2 - 232, (uint8_t *)string, RIGHT_MODE);
+				  putPieces(valueX, valueY);
+				  return 1;
 
+	  }
+	  return 0;
 }
 
+//Write to SD Card
 void writeSDcard()
 {
 	sprintf(string,"teste");
@@ -472,11 +482,12 @@ void writeSDcard()
   * @brief  The application entry point.
   * @retval int
   */
-int main(void)
+int main(void)	//TODO: MAIN
 {
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
+  
 
   /* Enable I-Cache---------------------------------------------------------*/
   SCB_EnableICache();
@@ -523,86 +534,112 @@ int main(void)
   HAL_TIM_Base_Start_IT(&htim6);
   HAL_TIM_Base_Start_IT(&htim7);
 
-  //writeSDcard();
-  //f_close(&SDFile);
+  flagPB = 0;
+  flagOnePlayer = 0;
+  flagTwoPlayers = 0;
+  flagMenu=1;
+  pf = 1;
+
 
   /* OPEN/CREATE THE FILE MODE APPEND */
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-	while (1)
-	{
-		temperature(option);
 
-		switch(option){
+  while (1)
+  {
+	  temperature();
 
-		case ONEPLAYER:
-				virtualBoard();
-				gameInfo();
-				gameTime();
-				playerTime();
-				gameboard();
-				placePieces();
-				//score();
-				//pieces();
-				//looser();
-				//winner();
-				//winner is();
-			break;
+	  if(flagPB)
+	  {
+		  flagPB=0;
+		  flagOnePlayer = 0;
+		  flagTwoPlayers = 0;
+		  flagMenu=1;
+		  pf = 1;
+		  BSP_LCD_FillRect(0,45,800,415);
+		  gf = 0;
+	  }
 
-		case TWOPLAYERS:
-				virtualBoard();
-				gameInfo();
-				gameTime();
-				playerTime();
-				gameboard();
-				placePieces();
-				//score();
-				//pieces();
-				//looser();
-				//winner();
-				//winner is();
-			break;
+	  if(flagMenu)
 
-		case MENU:
 
-			startMenu();
-
-			if (flagTS)
-			{
-				flagTS = 0;
-
-				if (Xvalue > 246 && Xvalue < 554 && Yvalue >= 106 && Yvalue <= 189)
+	  {
+		  if(pf){
+			  pf = 0;
+			  startMenu();
+		  }
+		  //flagMenu=0;
+		  if(flagTS)
+		  {
+			  	flagTS = 0;
+				if (valueX  > 246 && valueX  < 554 && valueY  >= 106 && valueY <= 189)
 				{
-					option = ONEPLAYER;
-					BSP_LCD_Clear(LCD_COLOR_WHITE);
-				}
-				if (Xvalue > 246 && Xvalue < 554 && Yvalue >= 291 && Yvalue <= 374)
-				{
-					option = TWOPLAYERS;
-					BSP_LCD_Clear(LCD_COLOR_WHITE);
-				}
-				/*if ((TS_State.touchY[0] >= 291) && (TS_State.touchY[0] <= 374))
-				  {
-					  option = HELP;
-				  }*/
-			}
-			break;
-		}
+					flagTS = 0;
+					flagOnePlayer = 1;
+					BSP_LCD_FillRect(0,45,800,415);
+					flagMenu=0;
+					gameboard();
+					gameInfo();
+					placePieces();
+					gameTime();
+					playerTime();
 
-		if(flagPB)
-		{
-			option = MENU;
-			startMenu();
-			nPlays = 0;
-			flagPB = 0;
-		}
+
+					//HAL_Delay(2000);
+					//valueX = -1;
+					//valueY = -1;
+
+				}
+				else if (valueX  > 246 && valueX  < 554 && valueY >= 291 && valueY <= 374)
+				{
+					flagTS = 0;
+					flagTwoPlayers = 1;
+					BSP_LCD_FillRect(0,45,800,415);
+					flagMenu=0;
+					gameboard();
+					gameInfo();
+					placePieces();
+					gameTime();
+					playerTime();
+
+					//HAL_Delay(2000);
+					//valueX = -1;
+					//valueY = -1;
+
+				}
+		  }
+	  }
+
+	  else if(flagOnePlayer)
+	  {
+		  BSP_LED_Toggle(LED_GREEN);
+
+		  if (detectTS())
+		  {
+			  gameboard();
+			  gameInfo();
+			  placePieces();
+
+		  }
+	  }
+	  else if(flagTwoPlayers)
+	  {
+
+		  if (detectTS())
+		  {
+			  BSP_LED_Toggle(LED_GREEN);
+			  gameboard();
+			  gameInfo();
+			  placePieces();
+		  }
+	  }
+  }
 
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	}
   /* USER CODE END 3 */
 }
 
@@ -997,7 +1034,7 @@ static void MX_TIM2_Init(void)
   /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 9999;
-  htim2.Init.CounterMode = TIM_COUNTERMODE_DOWN;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim2.Init.Period = 9999;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV4;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -1184,6 +1221,9 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI0_IRQn);
+
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
@@ -1203,7 +1243,17 @@ static void LCD_Config(void)
   /* Clear the LCD */
   BSP_LCD_Clear(LCD_COLOR_WHITE);
 
+  /* Set LCD Example description */
+  BSP_LCD_SetTextColor(LCD_COLOR_BLACK); //Rodapé
+  BSP_LCD_SetFont(&Font12);
+  BSP_LCD_DisplayStringAt(0, BSP_LCD_GetYSize()- 20, (uint8_t *)"Copyright (c) Oak Tree Company", CENTER_MODE);
 
+  BSP_LCD_SetTextColor(LCD_COLOR_LIGHTRED); //Header
+  BSP_LCD_FillRect(0, 0, BSP_LCD_GetXSize(), 45);
+  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+  BSP_LCD_SetBackColor(LCD_COLOR_LIGHTRED);
+  BSP_LCD_SetFont(&Font24);
+  BSP_LCD_DisplayStringAt(0, 12, (uint8_t *)"WELCOME TO REVERSI", CENTER_MODE);
 
   BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
   BSP_LCD_SetBackColor(LCD_COLOR_WHITE);
