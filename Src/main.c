@@ -266,12 +266,15 @@ void startMenu()
 	BSP_LCD_DisplayStringAt(318, 135, (uint8_t *)"ONE PLAYER", LEFT_MODE);
 }
 
+void initPositions(){
+	board[3][3] = PLAYER1;
+	board[4][4] = PLAYER1;
+	board[3][4] = PLAYER2;
+	board[4][3] = PLAYER2;
+}
+
 void gameboard()
 {
-	  board[3][3] = PLAYER1;
-	  board[4][4] = PLAYER1;
-	  board[3][4] = PLAYER2;
-	  board[4][3] = PLAYER2;
 
 	  for(int i = 0; i<SIZE; i++)
 	  {
@@ -416,12 +419,15 @@ void putPieces(uint16_t x, uint16_t y)
 					{
 						posX = SQUARE/2 + SQUARE*(i+1);
 						posY = SQUARE/2 + SQUARE*(j+1);
+
+						findPath(i,j);
 						board[i][j] = pl;
 					}
 			    }
 			}
 		}
 	}
+
     counterPlayer++;
 	swapPlayer();
 	}
@@ -473,6 +479,7 @@ void change(int i, int j, int x, int y)
 
     while (board[auxX][auxY] == jogadorSeguinte()) //Enquanto, no decorrer deste ciclo, nesta coordenada aparece a peca do jogador seguinte,
     {
+    	BSP_LED_Toggle(LED_RED);
         board[auxX][auxY] = pl; // a mesma e substituida pela do jogadir atual.
         if (x != i)
         {
@@ -530,7 +537,7 @@ int findPath(int i, int j) // Percorre todas as peças adjacentes
                     if (auxX < 0 || auxX > SIZE || auxY < 0 || auxY > SIZE)
                         break;
 
-                    if (board[auxX][auxY] == 0)
+                    if (board[auxX][auxY] == EMPTY)
                         break;
 
                     if (board[auxX][auxY] == pl)
@@ -804,6 +811,7 @@ int main(void)	//TODO: MAIN
 					BSP_LCD_FillRect(0,45,800,415);
 					flagMenu=0;
 
+					initPositions();
 					gameboard();
 					gameInfo();
 					findPoss();
@@ -823,7 +831,9 @@ int main(void)	//TODO: MAIN
 					flagTwoPlayers = 1;
 					BSP_LCD_FillRect(0,45,800,415);
 					flagMenu=0;
+					initPositions();
 					gameboard();
+
 					gameInfo();
 					findPoss();
 					placePieces();
