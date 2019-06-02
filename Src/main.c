@@ -25,7 +25,9 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdbool.h>
+#include <time.h>
 #include "stm32f769i_discovery.h"
 #include "stm32f769i_discovery_lcd.h"
 #include "stm32f769i_discovery_ts.h"
@@ -95,13 +97,12 @@ volatile uint8_t counterPlayer = 0;
 volatile uint8_t counterT2 = 20;
 volatile uint8_t counterT6 = 0;
 volatile uint8_t counterT7 = 0;
-volatile uint8_t counterTS = 0;
 
 long int JTemp = 0; //Internal Temperature converted
 uint32_t ConvertedValue; //Value to convert internal temperature
 char string[100];
+
 volatile char board [SIZE][SIZE] = {0};
-volatile int nPlays = 0;
 volatile uint16_t posX;
 volatile uint16_t posY;
 unsigned int nBytes;
@@ -110,6 +111,7 @@ int valueY;
 _Bool pf;
 int gf = 0;
 int pl = PLAYER1;
+volatile int nPlays = 0;
 
 /* USER CODE END PV */
 
@@ -127,6 +129,27 @@ static void MX_TIM6_Init(void);
 static void MX_TIM7_Init(void);
 /* USER CODE BEGIN PFP */
 static void LCD_Config();
+void gameTime();
+void playerTime();
+void temperature();
+void startMenu();
+void initPositions();
+void gameboard();
+void gameInfo();
+void colorPieces();
+void putPieces(uint16_t, uint16_t);
+int detectTS();
+int nextPlayer();
+void change(int i, int j, int x, int y);
+int findPath(int i, int j);
+int validAdjacent(int i, int j);
+int validEntrap (int i, int j);
+int validatePosition(int i, int j);
+void findPossible();
+int listPossible(int plPoss);
+void ARM();
+void writeSDcard();
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -142,7 +165,6 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 		if(TS_State.touchDetected)
 		{
 			flagTS = 1;
-			counterTS = 1;
 			valueX = TS_State.touchX[0];
 			valueY = TS_State.touchY[0];
 		}
@@ -266,13 +288,6 @@ void startMenu()
 	BSP_LCD_DisplayStringAt(318, 135, (uint8_t *)"ONE PLAYER", LEFT_MODE);
 }
 
-void initPositions(){
-	board[3][3] = PLAYER1;
-	board[4][4] = PLAYER1;
-	board[3][4] = PLAYER2;
-	board[4][3] = PLAYER2;
-}
-
 void gameboard()
 {
 
@@ -290,6 +305,14 @@ void gameboard()
 			  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
 		  }
 	  }
+}
+
+void initPositions()
+{
+	board[3][3] = PLAYER1;
+	board[4][4] = PLAYER1;
+	board[3][4] = PLAYER2;
+	board[4][3] = PLAYER2;
 }
 
 void gameInfo() //Board with game information (players, timers, scores)
@@ -349,22 +372,8 @@ void gameInfo() //Board with game information (players, timers, scores)
 	 BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
 }
 
-void swapPlayer()
-{
-
-
-	if(counterPlayer%2 == 0)
-	{
-		pl = PLAYER1;
-	}
-	else
-	{
-		pl = PLAYER2;
-	}
-}
-
 //Game and implemented rules
-void placePieces(void)
+void colorPieces(void)
 {
 	  for(int i = 0; i<SIZE; i++)
 	  {
@@ -422,16 +431,18 @@ void putPieces(uint16_t x, uint16_t y)
 
 						findPath(i,j);
 						board[i][j] = pl;
+						colorPieces();
+						HAL_Delay(2000);
+						findPath(i,j);
 					}
 			    }
 			}
 		}
 	}
-
-    counterPlayer++;
-	swapPlayer();
+	pl = nextPlayer();
 	}
 }
+
 int detectTS()//Interrupt Touch Screen
 {
 
@@ -448,13 +459,13 @@ int detectTS()//Interrupt Touch Screen
 	  return 0;
 }
 
-int jogadorSeguinte(){
-	if(pl==PLAYER1){
+int nextPlayer()
+{
+	if(pl == PLAYER1)
 		return PLAYER2;
-	}
-	if(pl==PLAYER2){
+
+	else
 		return PLAYER1;
-	}
 }
 
 void change(int i, int j, int x, int y)
@@ -477,7 +488,7 @@ void change(int i, int j, int x, int y)
             auxY++;
     }
 
-    while (board[auxX][auxY] == jogadorSeguinte()) //Enquanto, no decorrer deste ciclo, nesta coordenada aparece a peca do jogador seguinte,
+    while (board[auxX][auxY] == nextPlayer()) //Enquanto, no decorrer deste ciclo, nesta coordenada aparece a peca do jogador seguinte,
     {
     	BSP_LED_Toggle(LED_RED);
         board[auxX][auxY] = pl; // a mesma e substituida pela do jogadir atual.
@@ -512,12 +523,12 @@ int findPath(int i, int j) // Percorre todas as peças adjacentes
             if (y < 0 || y > SIZE)
                 continue;
 
-            if (board[x][y] == jogadorSeguinte())
+            if (board[x][y] == nextPlayer())
             {
                 auxX = x; //Coordenada x do proximo ponto na mesma direcçao
                 auxY = y; //Coordenada y do proximo ponto na mesma direcçao
 
-                while (board[auxX][auxY] == jogadorSeguinte()) // indica-nos a direcçao a seguir
+                while (board[auxX][auxY] == nextPlayer()) // indica-nos a direcçao a seguir
                 {
                     if (x != i)
                     {
@@ -552,7 +563,7 @@ int findPath(int i, int j) // Percorre todas as peças adjacentes
         return 0;
 }
 
-int validaAdjacente(int i, int j) //Funcao que valida a regra de colocar a peça num espaco livre adjacente a peca do adversario
+int validAdjacent(int i, int j) //Funcao que valida a regra de colocar a peça num espaco livre adjacente a peca do adversario
 {                                 //horizontal, vertical, diagonal
     int x, y;
 
@@ -565,14 +576,14 @@ int validaAdjacente(int i, int j) //Funcao que valida a regra de colocar a peça
         {
             if (y < 0 || y > SIZE) //significa que esta a ler cabecalho - coluna - e assim ignora esta posicao como valida
                 continue;
-            if (board[x][y] == jogadorSeguinte()) //Se na coordenada xy estiver uma peca do jogador seguinte:
+            if (board[x][y] == nextPlayer()) //Se na coordenada xy estiver uma peca do jogador seguinte:
                 return 1;    //retorna 1 considerando a posicao valida
         }
     }
     return 0;
 }
 
-int validaEntrap (int i, int j) //Funcao de validacao da regra de "trap"
+int validEntrap (int i, int j) //Funcao de validatePosition da regra de "trap"
 {
     int x, y, auxX, auxY; //x e y coordenadas de posicao pretendida    auxX e auxY - coordenadas da posicao seguinte na mesma direcao
 
@@ -585,12 +596,12 @@ int validaEntrap (int i, int j) //Funcao de validacao da regra de "trap"
         {
             if (y < 1 || y > SIZE)  //significa que esta a ler cabecalho - coluna -  e assim ignora esta posicao como valida
                 continue;
-            if (board[x][y] == jogadorSeguinte())   // Se na coordenada xy estiver uma peca do jogador seguinte:
+            if (board[x][y] == nextPlayer())   // Se na coordenada xy estiver uma peca do jogador seguinte:
             {
                 auxX = x; //proximo ponto na linha na mesma direcçao
                 auxY = y;  //proximo ponto na coluna na mesma direcçao
 
-                while (board[auxX][auxY] == jogadorSeguinte()) //Enquanto na coordenada auxX auxY estiver uma peca do jogador seguinte
+                while (board[auxX][auxY] == nextPlayer()) //Enquanto na coordenada auxX auxY estiver uma peca do jogador seguinte
                 {  // Este ciclo indica-nos a direcçao a seguir nas linhas e colunas
                     if (x != i) // Se x for diferente de i, a linha e diferente
                     {
@@ -622,24 +633,27 @@ int validaEntrap (int i, int j) //Funcao de validacao da regra de "trap"
     return 0;
 }
 
-int validacao(int i, int j) //se passar nestas condicoes todas retorna 1, que indica jogada valida - display.c
+int validatePosition(int i, int j) //se passar nestas condicoes todas retorna 1, que indica jogada valida - display.c
 {
     if (board [i][j] != EMPTY && board [i][j] != POSS1 && board [i][j] != POSS2) //posicao disponivel em linha - i e coluna - j, dado que 0 indica espaço vazio
     {
         return 0;
     }
 
-    if (validaEntrap(i, j) == 0) //Funcao de validacao da regra de "trap"
+    if (validEntrap(i, j) == 0) //Funcao de validatePosition da regra de "trap"
     {
         return 0;
     }
     return 1;
 }
 
-void findPoss(){
-	for(int i=0; i<SIZE; i++){
-		for(int j=0; j<SIZE; j++){
-			if(validacao(i,j)){
+void findPossible()
+{
+	for(int i=0; i<SIZE; i++)
+	{
+		for(int j=0; j<SIZE; j++)
+		{
+			if(validatePosition(i,j)){
 				if(pl==PLAYER1){
 					board[i][j] = POSS1;
 				}
@@ -647,7 +661,8 @@ void findPoss(){
 					board[i][j] = POSS2;
 				}
 			}else{
-				if(board[i][j]!=PLAYER1 && board[i][j]!=PLAYER2){
+				if(board[i][j]!=PLAYER1 && board[i][j]!=PLAYER2)
+				{
 					board[i][j] = EMPTY;
 				}
 			}
@@ -655,7 +670,7 @@ void findPoss(){
 	}
 }
 
-void listPossible(int list[]) //Cria o array de jogadas possiveis
+int listPossible(int plPoss) //Cria o array de jogadas possiveis
 {
     int n = 0;
     int i, j;
@@ -664,24 +679,53 @@ void listPossible(int list[]) //Cria o array de jogadas possiveis
     {
         for (j = 0; j < SIZE; j++) //Percorre array na coluna j
         {
-            if (validacao(i,j)) //Se a posicoes psssar na validacao
+            if (board[i][j]==plPoss) //Se a posicoes psssar na validatePosition
             {
                 n++; //Incrementa o numero de posiçoes validas
             }
         }
     }
+    return n;
 }
 
-/*int printList(int list[]) //Imprime a lista de jogadas possiveis
+void ARM()
 {
-    int n;
-    printf("\nIn this moment, the possible moves are: ");
+	int plPoss;
 
-    for (int n = 0; list[n] > 0; n++) {
-        printf("%d ", list[n]);
-    }
-    printf("\n\n");
-}*/
+	if(pl==PLAYER1)
+	{
+		plPoss = POSS1;
+	}
+
+	if(pl==PLAYER2)
+	{
+		plPoss = POSS2;
+	}
+
+	int nPoss = listPossible(plPoss);
+	int r = rand()%nPoss;
+	int aux = 0;
+
+	for(int i=0; i<SIZE; i++)
+	{
+		for(int j=0; j<SIZE; j++)
+		{
+			if(board[i][j]==plPoss)
+			{
+				if(aux==r)
+				{
+					board[i][j] = pl;
+					colorPieces();
+					HAL_Delay(2000);
+					findPath(i,j);
+					pl = nextPlayer();
+					return;
+				}
+				aux++;
+			}
+		}
+	}
+}
 
 //Write to SD Card
 void writeSDcard()
@@ -719,7 +763,6 @@ int main(void)	//TODO: MAIN
 
   /* USER CODE END 1 */
   
-
   /* Enable I-Cache---------------------------------------------------------*/
   SCB_EnableICache();
 
@@ -771,6 +814,8 @@ int main(void)	//TODO: MAIN
   flagMenu=1;
   pf = 1;
 
+  srand(time(NULL));
+
   /* OPEN/CREATE THE FILE MODE APPEND */
   /* USER CODE END 2 */
 
@@ -793,72 +838,67 @@ int main(void)	//TODO: MAIN
 	  }
 
 	  if(flagMenu)
-
-
 	  {
-		  if(pf){
+		  if(pf)
+		  {
 			  pf = 0;
 			  startMenu();
 		  }
-		  //flagMenu=0;
 		  if(flagTS)
 		  {
 			  	flagTS = 0;
 				if (valueX  > 246 && valueX  < 554 && valueY  >= 106 && valueY <= 189)
 				{
 					flagTS = 0;
-					flagOnePlayer = 1;
-					BSP_LCD_FillRect(0,45,800,415);
+					flagTwoPlayers = 1;
+					BSP_LCD_FillRect(0,45,800,400);
 					flagMenu=0;
-
 					initPositions();
 					gameboard();
 					gameInfo();
-					findPoss();
-					placePieces();
 					gameTime();
 					playerTime();
-
-
-					//HAL_Delay(2000);
-					//valueX = -1;
-					//valueY = -1;
-
+					findPossible();
+					colorPieces();
+					//gameTime();
+					//playerTime();
 				}
 				else if (valueX  > 246 && valueX  < 554 && valueY >= 291 && valueY <= 374)
 				{
 					flagTS = 0;
 					flagTwoPlayers = 1;
-					BSP_LCD_FillRect(0,45,800,415);
+					BSP_LCD_FillRect(0,45,800,400);
 					flagMenu=0;
 					initPositions();
 					gameboard();
-
 					gameInfo();
-					findPoss();
-					placePieces();
 					gameTime();
 					playerTime();
-
-					//HAL_Delay(2000);
-					//valueX = -1;
-					//valueY = -1;
-
+					findPossible();
+					colorPieces();
+					//gameTime();
+					//playerTime();
 				}
 		  }
 	  }
 
 	  else if(flagOnePlayer)
 	  {
-		  BSP_LED_Toggle(LED_GREEN);
-
 		  if (detectTS())
 		  {
 			  gameboard();
 			  gameInfo();
-				findPoss();
-			  placePieces();
-
+			  gameTime();
+			  playerTime();
+			  findPossible();
+			  colorPieces();
+			  HAL_Delay(2000);
+			  ARM();
+			  gameboard();
+			  gameInfo();
+			  findPossible();
+			  colorPieces();
+			  HAL_Delay(2000);
 		  }
 	  }
 	  else if(flagTwoPlayers)
@@ -866,11 +906,12 @@ int main(void)	//TODO: MAIN
 
 		  if (detectTS())
 		  {
-			  BSP_LED_Toggle(LED_GREEN);
 			  gameboard();
 			  gameInfo();
-				findPoss();
-			  placePieces();
+			  gameTime();
+			  playerTime();
+			  findPossible();
+			  colorPieces();
 		  }
 	  }
   }
@@ -1480,9 +1521,10 @@ static void LCD_Config(void)
 
   /* Clear the LCD */
   BSP_LCD_Clear(LCD_COLOR_WHITE);
-
+  BSP_LCD_DrawBitmap(0, 0, (uint8_t*) stlogo);
   /* Set LCD Example description */
-  BSP_LCD_SetTextColor(LCD_COLOR_BLACK); //Rodapé
+  BSP_LCD_SetTextColor(LCD_COLOR_WHITE); //Rodapé
+  BSP_LCD_SetBackColor(LCD_COLOR_BLACK);
   BSP_LCD_SetFont(&Font12);
   BSP_LCD_DisplayStringAt(0, BSP_LCD_GetYSize()- 20, (uint8_t *)"Copyright (c) Oak Tree Company", CENTER_MODE);
 
@@ -1493,9 +1535,9 @@ static void LCD_Config(void)
   BSP_LCD_SetFont(&Font24);
   BSP_LCD_DisplayStringAt(0, 12, (uint8_t *)"WELCOME TO REVERSI", CENTER_MODE);
 
-  BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
-  BSP_LCD_SetBackColor(LCD_COLOR_WHITE);
-  BSP_LCD_SetFont(&Font24);
+  //BSP_LCD_SetbackColor(LCD_COLOR_BLACK);
+  //BSP_LCD_SetBackColor(LCD_COLOR_WHITE);
+  //BSP_LCD_SetFont(&Font24);
 }
 
 
