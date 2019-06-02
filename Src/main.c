@@ -47,6 +47,8 @@
 #define EMPTY					0
 #define PLAYER1					1
 #define PLAYER2					2
+#define POSS1					3
+#define POSS2					4
 //Temperature
 #define TEMP_REFRESH_PERIOD   	1000    /* Internal temperature refresh period */
 #define MAX_CONVERTED_VALUE   	4095    /* Max converted value */
@@ -283,31 +285,9 @@ void gameboard()
 			  BSP_LCD_SetTextColor(LCD_COLOR_DARKGRAY);
 			  BSP_LCD_FillRect(xPosition, yPosition, SQUARE-2, SQUARE-2);
 			  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-
-
 		  }
 	  }
-//	  putPieces(3,3);
-//	  putPieces(4,4);
-//	  putPieces(3,4);
-//	  putPieces(4,3);
 }
-
-/*void virtualBoard()
-{
-	for(int i = 0; i < SIZE; i++)
-	{
-		for(int j = 0; j < SIZE; j++)
-		{
-			board[i][j] = EMPTY;
-		}
-	}
-
-	board[3][3] = PLAYER1;
-	board[4][4] = PLAYER1;
-	board[3][4] = PLAYER2;
-	board[4][3] = PLAYER2;
-}*/
 
 void gameInfo() //Board with game information (players, timers, scores)
 {
@@ -396,7 +376,6 @@ void placePieces(void)
 				BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
 				BSP_LCD_FillCircle(posX, posY, BALL);
 				BSP_LCD_DrawCircle(posX, posY, CIRCLE);
-				BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
 			  }
 			  if(board[i][j] == PLAYER2)
 			  {
@@ -404,7 +383,18 @@ void placePieces(void)
 				BSP_LCD_SetTextColor(LCD_COLOR_LIGHTRED);
 				BSP_LCD_FillCircle(posX, posY, BALL);
 				BSP_LCD_DrawCircle(posX, posY, CIRCLE);
+			  }
+			  if(board[i][j] == POSS1)
+			  {
+				//Ball player 2 (X and Y)
 				BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+				BSP_LCD_DrawCircle(posX, posY, CIRCLE);
+			  }
+			  if(board[i][j] == POSS2)
+			  {
+				//Ball player 2 (X and Y)
+				BSP_LCD_SetTextColor(LCD_COLOR_LIGHTRED);
+				BSP_LCD_DrawCircle(posX, posY, CIRCLE);
 			  }
 		  }
 	  }
@@ -420,7 +410,7 @@ void putPieces(uint16_t x, uint16_t y)
 		{
 			for(int j=0; j<SIZE; j++)
 			{
-			    if(board[i][j] == 0)
+			    if((board[i][j] == POSS1 && pl==PLAYER1) || (board[i][j] == POSS2 && pl==PLAYER2))
 			    {
 					if((x > SQUARE*(i+1)) && (x <= SQUARE*(i+2)) && (y > SQUARE*(j+1)) && (y <= SQUARE*(j+2)))
 					{
@@ -451,6 +441,240 @@ int detectTS()//Interrupt Touch Screen
 	  }
 	  return 0;
 }
+
+int jogadorSeguinte(){
+	if(pl==PLAYER1){
+		return PLAYER2;
+	}
+	if(pl==PLAYER2){
+		return PLAYER1;
+	}
+}
+
+void change(int i, int j, int x, int y)
+{
+    int auxX = i; //Coordenada auxX e auxY da peca inserida pelo jogador actual
+    int auxY = j;
+
+    if (x != i)
+    {
+        if (x < i)
+            auxX--;
+        else
+            auxX++;
+    }
+    if (y != j) {
+
+        if (y < j)
+            auxY--;
+        else
+            auxY++;
+    }
+
+    while (board[auxX][auxY] == jogadorSeguinte()) //Enquanto, no decorrer deste ciclo, nesta coordenada aparece a peca do jogador seguinte,
+    {
+        board[auxX][auxY] = pl; // a mesma e substituida pela do jogadir atual.
+        if (x != i)
+        {
+            if (x < i)
+                auxX--;
+            else
+                auxX++;
+        }
+        if (y != j)
+        {
+            if (y < j)
+                auxY--;
+            else
+                auxY++;
+        }
+    }
+}
+
+int findPath(int i, int j) // Percorre todas as peças adjacentes
+{
+    int x, y, auxX=0, auxY=0; //Coordenada xy da peca inserida pelo jogador actual / auxX e auxY - coordenadas auxiliares
+
+    for (x = i - 1; x <= i + 1; x++)
+    {
+        if (x < 0 || x > SIZE)
+            continue;
+
+        for (y = j - 1; y <= j + 1; y++)
+        {
+            if (y < 0 || y > SIZE)
+                continue;
+
+            if (board[x][y] == jogadorSeguinte())
+            {
+                auxX = x; //Coordenada x do proximo ponto na mesma direcçao
+                auxY = y; //Coordenada y do proximo ponto na mesma direcçao
+
+                while (board[auxX][auxY] == jogadorSeguinte()) // indica-nos a direcçao a seguir
+                {
+                    if (x != i)
+                    {
+                        if (x < i)
+                            auxX--;
+                        else
+                            auxX++;
+                    }
+
+                    if (y != j)
+                    {
+                        if (y < j)
+                            auxY--;
+                        else
+                            auxY++;
+                    }
+                    if (auxX < 0 || auxX > SIZE || auxY < 0 || auxY > SIZE)
+                        break;
+
+                    if (board[auxX][auxY] == 0)
+                        break;
+
+                    if (board[auxX][auxY] == pl)
+                    {
+
+                        change(i,j,auxX,auxY); //Funcao de troca de pecas do jogador seguinte pelas do jogador atual
+                    }                          //encontradas pelo ciclo anterior quando verificada a condicao de "trap"
+                }
+            }
+        }
+    }
+        return 0;
+}
+
+int validaAdjacente(int i, int j) //Funcao que valida a regra de colocar a peça num espaco livre adjacente a peca do adversario
+{                                 //horizontal, vertical, diagonal
+    int x, y;
+
+    for (x = i - 1; x <= i + 1; x++) //Ciclo de procura a esquerda e a direita duma posicao i
+    {
+        if (x < 0 || x > SIZE) //significa que esta a ler cabecalho - linha - e assim ignora esta posicao como valida
+            continue;
+
+        for (y = j - 1; y <= j + 1; y++)  //Ciclo de procura acima e abaixo duma posicao j
+        {
+            if (y < 0 || y > SIZE) //significa que esta a ler cabecalho - coluna - e assim ignora esta posicao como valida
+                continue;
+            if (board[x][y] == jogadorSeguinte()) //Se na coordenada xy estiver uma peca do jogador seguinte:
+                return 1;    //retorna 1 considerando a posicao valida
+        }
+    }
+    return 0;
+}
+
+int validaEntrap (int i, int j) //Funcao de validacao da regra de "trap"
+{
+    int x, y, auxX, auxY; //x e y coordenadas de posicao pretendida    auxX e auxY - coordenadas da posicao seguinte na mesma direcao
+
+    for (x = i - 1; x <= i + 1; x++)   //Ciclo de procura acima e abaixo duma posicao i
+    {
+        if (x < 1 || x > SIZE) //significa que esta a ler cabecalho - linha - e assim ignora esta posicao como valida
+            continue;
+
+        for (y = j - 1; y <= j + 1; y++)   //Ciclo de procura acima e abaixo duma posicao j
+        {
+            if (y < 1 || y > SIZE)  //significa que esta a ler cabecalho - coluna -  e assim ignora esta posicao como valida
+                continue;
+            if (board[x][y] == jogadorSeguinte())   // Se na coordenada xy estiver uma peca do jogador seguinte:
+            {
+                auxX = x; //proximo ponto na linha na mesma direcçao
+                auxY = y;  //proximo ponto na coluna na mesma direcçao
+
+                while (board[auxX][auxY] == jogadorSeguinte()) //Enquanto na coordenada auxX auxY estiver uma peca do jogador seguinte
+                {  // Este ciclo indica-nos a direcçao a seguir nas linhas e colunas
+                    if (x != i) // Se x for diferente de i, a linha e diferente
+                    {
+                        if (x < i) //se x for inferior a i:
+                            auxX--; //desloca o x para cima
+                        else
+                            auxX++; //caso contrario, desloca o x para baixo
+                    }
+                    if (y != j) //Se y for diferente de j, a coluna e diferente
+                    {
+
+                        if (y < j)
+                            auxY--;
+                        else
+                            auxY++;
+                    }
+                    if (auxX < 1 || auxX > SIZE || auxY < 1 || auxY > SIZE) //Se se verificar, esta a ler o cabecalho
+                        break; //interrompe o ciclo assim que o if se verificou
+
+                    if (board[auxX][auxY] == 0) //Se se verificar, encontrou espaço vazio
+                        break;
+
+                    if (board[auxX][auxY] == pl) //Se na coordenada auxX auxY, encontrar uma peca do jogador actual
+                        return 1; //Reinicia o ciclo
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+int validacao(int i, int j) //se passar nestas condicoes todas retorna 1, que indica jogada valida - display.c
+{
+    if (board [i][j] != EMPTY && board [i][j] != POSS1 && board [i][j] != POSS2) //posicao disponivel em linha - i e coluna - j, dado que 0 indica espaço vazio
+    {
+        return 0;
+    }
+
+    if (validaEntrap(i, j) == 0) //Funcao de validacao da regra de "trap"
+    {
+        return 0;
+    }
+    return 1;
+}
+
+void findPoss(){
+	for(int i=0; i<SIZE; i++){
+		for(int j=0; j<SIZE; j++){
+			if(validacao(i,j)){
+				if(pl==PLAYER1){
+					board[i][j] = POSS1;
+				}
+				if(pl==PLAYER2){
+					board[i][j] = POSS2;
+				}
+			}else{
+				if(board[i][j]!=PLAYER1 && board[i][j]!=PLAYER2){
+					board[i][j] = EMPTY;
+				}
+			}
+		}
+	}
+}
+
+void listPossible(int list[]) //Cria o array de jogadas possiveis
+{
+    int n = 0;
+    int i, j;
+
+    for (i = 0; i < SIZE; i++) //Percorre array na linha i
+    {
+        for (j = 0; j < SIZE; j++) //Percorre array na coluna j
+        {
+            if (validacao(i,j)) //Se a posicoes psssar na validacao
+            {
+                n++; //Incrementa o numero de posiçoes validas
+            }
+        }
+    }
+}
+
+/*int printList(int list[]) //Imprime a lista de jogadas possiveis
+{
+    int n;
+    printf("\nIn this moment, the possible moves are: ");
+
+    for (int n = 0; list[n] > 0; n++) {
+        printf("%d ", list[n]);
+    }
+    printf("\n\n");
+}*/
 
 //Write to SD Card
 void writeSDcard()
@@ -540,7 +764,6 @@ int main(void)	//TODO: MAIN
   flagMenu=1;
   pf = 1;
 
-
   /* OPEN/CREATE THE FILE MODE APPEND */
   /* USER CODE END 2 */
 
@@ -580,8 +803,10 @@ int main(void)	//TODO: MAIN
 					flagOnePlayer = 1;
 					BSP_LCD_FillRect(0,45,800,415);
 					flagMenu=0;
+
 					gameboard();
 					gameInfo();
+					findPoss();
 					placePieces();
 					gameTime();
 					playerTime();
@@ -600,6 +825,7 @@ int main(void)	//TODO: MAIN
 					flagMenu=0;
 					gameboard();
 					gameInfo();
+					findPoss();
 					placePieces();
 					gameTime();
 					playerTime();
@@ -620,6 +846,7 @@ int main(void)	//TODO: MAIN
 		  {
 			  gameboard();
 			  gameInfo();
+				findPoss();
 			  placePieces();
 
 		  }
@@ -632,6 +859,7 @@ int main(void)	//TODO: MAIN
 			  BSP_LED_Toggle(LED_GREEN);
 			  gameboard();
 			  gameInfo();
+				findPoss();
 			  placePieces();
 		  }
 	  }
