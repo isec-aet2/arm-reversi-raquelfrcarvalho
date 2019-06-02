@@ -92,11 +92,18 @@ volatile uint8_t flagT6 = 0;
 volatile uint8_t flagT7 = 0;
 volatile uint8_t flagOnePlayer = 0;
 volatile uint8_t flagTwoPlayers = 0;
+
 volatile uint8_t counter = 0;
 volatile uint8_t counterPlayer = 0;
+volatile uint8_t counterPieces1 = 0;
+volatile uint8_t counterPieces2 = 0;
+volatile uint8_t counterMoves = 0;
 volatile uint8_t counterT2 = 20;
 volatile uint8_t counterT6 = 0;
 volatile uint8_t counterT7 = 0;
+
+volatile uint8_t score1 = 0;
+volatile uint8_t score2 = 0;
 
 long int JTemp = 0; //Internal Temperature converted
 uint32_t ConvertedValue; //Value to convert internal temperature
@@ -135,7 +142,7 @@ void temperature();
 void startMenu();
 void initPositions();
 void gameboard();
-void gameInfo();
+void clearBoard();
 void colorPieces();
 void putPieces(uint16_t, uint16_t);
 int detectTS();
@@ -148,6 +155,9 @@ int validatePosition(int i, int j);
 void findPossible();
 int listPossible(int plPoss);
 void ARM();
+void gameOver();
+void scores();
+void gameInfo();
 void writeSDcard();
 
 /* USER CODE END PFP */
@@ -271,8 +281,6 @@ void temperature() //internal temperature of the ARM
 //Layouts, Menu and Boards
 void startMenu()
 {
-	//BSP_LCD_DrawBitmap(0, 0, (uint8_t*) stlogo);
-
 	BSP_LCD_SetTextColor(LCD_COLOR_LIGHTRED);
 	BSP_LCD_DrawRect(246, 106, 308, 83);
 	BSP_LCD_DrawRect(247, 107, 306, 81);
@@ -283,14 +291,12 @@ void startMenu()
 	BSP_LCD_SetFont(&Font24);
 	BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
 	BSP_LCD_SetBackColor(LCD_COLOR_LIGHTRED);
-	//BSP_LCD_DisplayStringAt(318, 135, (uint8_t *)"ONE PLAYER", LEFT_MODE);
 	BSP_LCD_DisplayStringAt(316, 320, (uint8_t *)"TWO PLAYERS", LEFT_MODE);
 	BSP_LCD_DisplayStringAt(318, 135, (uint8_t *)"ONE PLAYER", LEFT_MODE);
 }
 
 void gameboard()
 {
-
 	  for(int i = 0; i<SIZE; i++)
 	  {
 		  int xPosition = SQUARE + i * SQUARE;
@@ -305,6 +311,17 @@ void gameboard()
 			  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
 		  }
 	  }
+}
+
+void clearBoard()
+{
+	for(int i = 0; i<SIZE; i++)
+	{
+		for(int j = 0; j<SIZE; j++)
+		{
+			board[i][j] = 0;
+		}
+	}
 }
 
 void initPositions()
@@ -338,25 +355,31 @@ void gameInfo() //Board with game information (players, timers, scores)
 
 	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+35, BSP_LCD_GetYSize()/10+75, (uint8_t *)"PLAYER 1", LEFT_MODE);
 	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+190, BSP_LCD_GetYSize()/10+75, (uint8_t *)"PLAYER 2", LEFT_MODE);
-	 sprintf(string, "PIECES    ");
+
 	 BSP_LCD_SetFont(&Font12);
 	 BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
+	 sprintf(string, "PIECES    %d", counterPieces1);
 	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+40, BSP_LCD_GetYSize()/10+110, (uint8_t *)string, LEFT_MODE);
+	 sprintf(string, "PIECES    %d", counterPieces2);
 	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+195, BSP_LCD_GetYSize()/10+110, (uint8_t *)string, LEFT_MODE);
+
 	 sprintf(string, "WINNER    ");
 	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+40, BSP_LCD_GetYSize()/10+170, (uint8_t *)string, LEFT_MODE);
 	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+195, BSP_LCD_GetYSize()/10+170, (uint8_t *)string, LEFT_MODE);
+
 	 sprintf(string, "LOOSER    ");
 	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+40, BSP_LCD_GetYSize()/10+200, (uint8_t *)string, LEFT_MODE);
 	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+195, BSP_LCD_GetYSize()/10+200, (uint8_t *)string, LEFT_MODE);
-	 sprintf(string, "SCORE     ");
+
+	 sprintf(string, "SCORE     %d", score1);
 	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+40, BSP_LCD_GetYSize()/10+230, (uint8_t *)string, LEFT_MODE);
+	 sprintf(string, "SCORE     %d", score2);
 	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+195, BSP_LCD_GetYSize()/10+230, (uint8_t *)string, LEFT_MODE);
 	 BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-	 BSP_LCD_SetFont(&Font16);
-	 BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
-	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+40, BSP_LCD_GetYSize()/10+300, (uint8_t *)"WINNER IS PLAYER X", LEFT_MODE);
-	 BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+//	 BSP_LCD_SetFont(&Font16);
+//	 BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
+//	 BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+40, BSP_LCD_GetYSize()/10+300, (uint8_t *)"WINNER IS PLAYER X", LEFT_MODE);
+//	 BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
 
 	 BSP_LCD_SetBackColor(LCD_COLOR_LIGHTRED);
 	 BSP_LCD_SetFont(&Font16);
@@ -414,9 +437,7 @@ void colorPieces(void)
 
 void putPieces(uint16_t x, uint16_t y)
 {
-
-	if(!flagMenu)
-    {if((x >= SQUARE) && (y >= SQUARE) && (x <= (SQUARE*(SIZE+1))) && (y <= (SQUARE*(SIZE+1))))
+    if((x >= SQUARE) && (y >= SQUARE) && (x <= (SQUARE*(SIZE+1))) && (y <= (SQUARE*(SIZE+1))))
     {
         for(int i=0; i<SIZE; i++)
 		{
@@ -432,31 +453,27 @@ void putPieces(uint16_t x, uint16_t y)
 						findPath(i,j);
 						board[i][j] = pl;
 						colorPieces();
-						HAL_Delay(2000);
-						findPath(i,j);
+						//HAL_Delay(2000);
+						pl = nextPlayer();
+						return;
 					}
 			    }
 			}
 		}
 	}
-	pl = nextPlayer();
-	}
 }
 
 int detectTS()//Interrupt Touch Screen
 {
+	if(flagTS)
+	{
+		flagTS = 0;
+		HAL_Delay(100);
 
-	  if(flagTS)
-	  {
-		  flagTS = 0;
-		  HAL_Delay(100);
-
-
-				  putPieces(valueX, valueY);
-				  return 1;
-
-	  }
-	  return 0;
+		putPieces(valueX, valueY);
+		return 1;
+	}
+	return 0;
 }
 
 int nextPlayer()
@@ -480,8 +497,8 @@ void change(int i, int j, int x, int y)
         else
             auxX++;
     }
-    if (y != j) {
-
+    if (y != j)
+    {
         if (y < j)
             auxY--;
         else
@@ -490,7 +507,6 @@ void change(int i, int j, int x, int y)
 
     while (board[auxX][auxY] == nextPlayer()) //Enquanto, no decorrer deste ciclo, nesta coordenada aparece a peca do jogador seguinte,
     {
-    	BSP_LED_Toggle(LED_RED);
         board[auxX][auxY] = pl; // a mesma e substituida pela do jogadir atual.
         if (x != i)
         {
@@ -511,7 +527,7 @@ void change(int i, int j, int x, int y)
 
 int findPath(int i, int j) // Percorre todas as peças adjacentes
 {
-    int x, y, auxX=0, auxY=0; //Coordenada xy da peca inserida pelo jogador actual / auxX e auxY - coordenadas auxiliares
+    int x, y, auxX = 0, auxY = 0; //Coordenada xy da peca inserida pelo jogador actual / auxX e auxY - coordenadas auxiliares
 
     for (x = i - 1; x <= i + 1; x++)
     {
@@ -653,14 +669,19 @@ void findPossible()
 	{
 		for(int j=0; j<SIZE; j++)
 		{
-			if(validatePosition(i,j)){
-				if(pl==PLAYER1){
+			if(validatePosition(i,j))
+			{
+				if(pl==PLAYER1)
+				{
 					board[i][j] = POSS1;
 				}
-				if(pl==PLAYER2){
+				if(pl==PLAYER2)
+				{
 					board[i][j] = POSS2;
 				}
-			}else{
+			}
+			else
+			{
 				if(board[i][j]!=PLAYER1 && board[i][j]!=PLAYER2)
 				{
 					board[i][j] = EMPTY;
@@ -710,13 +731,13 @@ void ARM()
 	{
 		for(int j=0; j<SIZE; j++)
 		{
-			if(board[i][j]==plPoss)
+			if(board[i][j] == plPoss)
 			{
 				if(aux==r)
 				{
 					board[i][j] = pl;
 					colorPieces();
-					HAL_Delay(2000);
+					//HAL_Delay(2000);
 					findPath(i,j);
 					pl = nextPlayer();
 					return;
@@ -727,10 +748,60 @@ void ARM()
 	}
 }
 
+void score ()
+{
+	for (int i=0; i < SIZE; i++)
+	{
+		for(int j = 0; j < SIZE; j++)
+		{
+			if(board[i][j] == PLAYER1)
+			{
+				counterPieces1++; //conta peças
+			}
+			else if(board[i][j] == PLAYER2)
+			{
+				counterPieces2++; //conta peças
+			}
+		}
+	}
+	score1 = counterPieces1 * 10;
+	score2 = counterPieces2 * 10;
+}
+
+void gameOver()
+{
+	if(POSS1 == 0 || POSS2 == 0) //Quando não houver jogadas disponíveis
+	{
+		if(score1 > score2)
+		{
+			BSP_LCD_SetFont(&Font16);
+			BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
+			BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+40, BSP_LCD_GetYSize()/10+300, (uint8_t *)"THE WINNER IS PLAYER 1", LEFT_MODE);
+			BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+		}
+		else if(score1 < score2)
+		{
+			BSP_LCD_SetFont(&Font16);
+			BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
+			BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+40, BSP_LCD_GetYSize()/10+300, (uint8_t *)"THE WINNER IS PLAYER 2", LEFT_MODE);
+			BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+		}
+		else
+		{
+			BSP_LCD_SetFont(&Font16);
+			BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
+			BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+40, BSP_LCD_GetYSize()/10+300, (uint8_t *)"IT´S A TIE: LOOOSEEERS!", LEFT_MODE);
+			BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+		}
+	}
+}
+
 //Write to SD Card
 void writeSDcard()
 {
-	sprintf(string,"teste");
+	char stringA[100];
+
+	sprintf(stringA,"Test: write in card \n");
 
 	if(f_mount(&SDFatFS, SDPath, 0)!= FR_OK)
 		Error_Handler();
@@ -741,14 +812,16 @@ void writeSDcard()
 	else
 		BSP_LED_Toggle(LED_GREEN);
 
-	if(f_write(&SDFile, string, strlen(string), &nBytes) != FR_OK)
+	if(f_write(&SDFile, stringA, strlen(stringA), &nBytes) != FR_OK)
 		Error_Handler();
 
 	else
 	{
-		BSP_LED_Toggle(LED_GREEN);
+		BSP_LED_Toggle(LED_RED);
 		HAL_Delay(250);
 	}
+
+	f_close(&SDFile);
 }
 
 /* USER CODE END 0 */
@@ -833,8 +906,9 @@ int main(void)	//TODO: MAIN
 		  flagTwoPlayers = 0;
 		  flagMenu=1;
 		  pf = 1;
-		  BSP_LCD_FillRect(0,45,800,415);
+		  BSP_LCD_FillRect(0, 45, 800, 400);
 		  gf = 0;
+		  clearBoard();
 	  }
 
 	  if(flagMenu)
@@ -850,75 +924,109 @@ int main(void)	//TODO: MAIN
 				if (valueX  > 246 && valueX  < 554 && valueY  >= 106 && valueY <= 189)
 				{
 					flagTS = 0;
-					flagTwoPlayers = 1;
-					BSP_LCD_FillRect(0,45,800,400);
+					flagOnePlayer = 1;
+					BSP_LCD_FillRect(0, 45, 800, 400);
 					flagMenu=0;
 					initPositions();
 					gameboard();
 					gameInfo();
-					gameTime();
-					playerTime();
+					counterT6 = 0;
 					findPossible();
+					counterPieces1 = 0;
+					counterPieces2 = 0;
 					colorPieces();
-					//gameTime();
-					//playerTime();
+					score();
+					gameOver();
+
 				}
 				else if (valueX  > 246 && valueX  < 554 && valueY >= 291 && valueY <= 374)
 				{
 					flagTS = 0;
 					flagTwoPlayers = 1;
-					BSP_LCD_FillRect(0,45,800,400);
+					BSP_LCD_FillRect(0, 45, 800, 400);
 					flagMenu=0;
 					initPositions();
 					gameboard();
 					gameInfo();
-					gameTime();
-					playerTime();
+					counterT6 = 0;
 					findPossible();
+					counterPieces1 = 0;
+					counterPieces2 = 0;
 					colorPieces();
-					//gameTime();
-					//playerTime();
+					score();
+					gameOver();
 				}
 		  }
 	  }
 
 	  else if(flagOnePlayer)
 	  {
-		  if (detectTS())
-		  {
-			  gameboard();
-			  gameInfo();
-			  gameTime();
-			  playerTime();
-			  findPossible();
-			  colorPieces();
-			  HAL_Delay(2000);
-			  ARM();
-			  gameboard();
-			  gameInfo();
-			  findPossible();
-			  colorPieces();
-			  HAL_Delay(2000);
-		  }
-	  }
-	  else if(flagTwoPlayers)
-	  {
+		  gameTime();
 
 		  if (detectTS())
 		  {
-			  gameboard();
-			  gameInfo();
-			  gameTime();
+			  counterPieces1 = 0;
+			  counterPieces2 = 0;
+			  counterT6 = 0;
 			  playerTime();
+			  gameboard();
+			  score();
+			  gameInfo();
 			  findPossible();
 			  colorPieces();
+
+			  //if(gameOver());
+
+			  ARM();
+			  counterPieces1 = 0;
+			  counterPieces2 = 0;
+			  counterT6 = 0;
+			  playerTime();
+			  gameboard();
+			  score();
+			  gameInfo();
+			  findPossible();
+			  colorPieces();
+
+			  //score();
+			  gameOver();
+		  }
+	  }
+
+	  else if(flagTwoPlayers)
+	  {
+		  gameTime();
+
+		  if (detectTS())
+		  {
+			  counterPieces1 = 0;
+			  counterPieces2 = 0;
+			  counterT6 = 0;
+			  playerTime();
+
+			  gameboard();
+			  score();
+			  gameInfo();
+
+			  findPossible();
+			  colorPieces();
+
+//			  if(gameOver());
+
+//			  counterMoves++;
+//			  if(counterMoves == 5)
+//			  {
+//				  HAL_ADC_Stop_IT(&hadc1);
+//				  writeSDcard();
+//				  HAL_ADC_Start_IT(&hadc1);
+//			  }
 		  }
 	  }
   }
-
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
   /* USER CODE END 3 */
 }
 
@@ -1521,7 +1629,7 @@ static void LCD_Config(void)
 
   /* Clear the LCD */
   BSP_LCD_Clear(LCD_COLOR_WHITE);
-  BSP_LCD_DrawBitmap(0, 0, (uint8_t*) stlogo);
+  //BSP_LCD_DrawBitmap(0, 0, (uint8_t*) stlogo);
   /* Set LCD Example description */
   BSP_LCD_SetTextColor(LCD_COLOR_WHITE); //Rodapé
   BSP_LCD_SetBackColor(LCD_COLOR_BLACK);
