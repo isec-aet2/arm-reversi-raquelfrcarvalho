@@ -98,6 +98,8 @@ volatile uint8_t counterPlayer = 0;
 volatile uint8_t counterPieces1 = 0;
 volatile uint8_t counterPieces2 = 0;
 volatile uint8_t counterMoves = 0;
+volatile uint8_t counterPoss1 = 0;
+volatile uint8_t counterPoss2 = 0;
 volatile uint8_t counterT2 = 20;
 volatile uint8_t counterT6 = 0;
 volatile uint8_t counterT7 = 0;
@@ -768,9 +770,27 @@ void score ()
 	score2 = counterPieces2 * 10;
 }
 
+void countPoss ()
+{
+	for (int i=0; i < SIZE; i++)
+	{
+		for(int j = 0; j < SIZE; j++)
+		{
+			if(board[i][j] == POSS1)
+			{
+				counterPoss1++; //conta peças
+			}
+			else if(board[i][j] == POSS2)
+			{
+				counterPoss2++; //conta peças
+			}
+		}
+	}
+}
+
 void gameOver()
 {
-	if(POSS1 == 0 || POSS2 == 0) //Quando não houver jogadas disponíveis
+	if(counterPoss1 == 0 || counterPoss1 == 0) //Quando não houver jogadas disponíveis
 	{
 		if(score1 > score2)
 		{
@@ -909,6 +929,11 @@ int main(void)	//TODO: MAIN
 		  BSP_LCD_FillRect(0, 45, 800, 400);
 		  gf = 0;
 		  clearBoard();
+
+		  HAL_ADC_Stop_IT(&hadc1);
+		  writeSDcard();
+		  HAL_ADC_Start_IT(&hadc1);
+
 	  }
 
 	  if(flagMenu)
@@ -934,8 +959,11 @@ int main(void)	//TODO: MAIN
 					findPossible();
 					counterPieces1 = 0;
 					counterPieces2 = 0;
+					counterPoss1 = 0;
+					counterPoss2 = 0;
 					colorPieces();
 					score();
+					countPoss();
 					gameOver();
 
 				}
@@ -952,7 +980,10 @@ int main(void)	//TODO: MAIN
 					findPossible();
 					counterPieces1 = 0;
 					counterPieces2 = 0;
+					counterPoss1 = 0;
+					counterPoss2 = 0;
 					colorPieces();
+					countPoss();
 					score();
 					gameOver();
 				}
@@ -967,28 +998,33 @@ int main(void)	//TODO: MAIN
 		  {
 			  counterPieces1 = 0;
 			  counterPieces2 = 0;
+			  counterPoss1 = 0;
+			  counterPoss2 = 0;
 			  counterT6 = 0;
 			  playerTime();
 			  gameboard();
 			  score();
+			  countPoss();
 			  gameInfo();
 			  findPossible();
 			  colorPieces();
 
-			  //if(gameOver());
+			  gameOver();
 
 			  ARM();
 			  counterPieces1 = 0;
 			  counterPieces2 = 0;
+			  counterPoss1 = 0;
+			  counterPoss2 = 0;
 			  counterT6 = 0;
 			  playerTime();
 			  gameboard();
 			  score();
+			  countPoss();
 			  gameInfo();
 			  findPossible();
 			  colorPieces();
 
-			  //score();
 			  gameOver();
 		  }
 	  }
@@ -1001,25 +1037,20 @@ int main(void)	//TODO: MAIN
 		  {
 			  counterPieces1 = 0;
 			  counterPieces2 = 0;
+			  counterPoss1 = 0;
+			  counterPoss2 = 0;
 			  counterT6 = 0;
 			  playerTime();
 
 			  gameboard();
 			  score();
+			  countPoss();
 			  gameInfo();
 
 			  findPossible();
 			  colorPieces();
 
-//			  if(gameOver());
-
-//			  counterMoves++;
-//			  if(counterMoves == 5)
-//			  {
-//				  HAL_ADC_Stop_IT(&hadc1);
-//				  writeSDcard();
-//				  HAL_ADC_Start_IT(&hadc1);
-//			  }
+			  gameOver();
 		  }
 	  }
   }
@@ -1629,7 +1660,7 @@ static void LCD_Config(void)
 
   /* Clear the LCD */
   BSP_LCD_Clear(LCD_COLOR_WHITE);
-  //BSP_LCD_DrawBitmap(0, 0, (uint8_t*) stlogo);
+  BSP_LCD_DrawBitmap(0, 0, (uint8_t*) stlogo);
   /* Set LCD Example description */
   BSP_LCD_SetTextColor(LCD_COLOR_WHITE); //Rodapé
   BSP_LCD_SetBackColor(LCD_COLOR_BLACK);
