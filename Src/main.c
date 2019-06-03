@@ -146,6 +146,7 @@ void clearBoard();
 void colorPieces();
 void putPieces(uint16_t, uint16_t);
 int detectTS();
+int detectPB();
 int nextPlayer();
 void change(int i, int j, int x, int y);
 int findPath(int i, int j);
@@ -764,7 +765,7 @@ void ARM()//ARM will play random using list of possible plays
 	}
 }
 
-void score ()
+void score () //count Pieces - Goal 13
 {
 	for (int i=0; i < SIZE; i++) //Look in all the board
 	{
@@ -802,15 +803,8 @@ void countPoss () //Count possible places
 	}
 }
 
-void gameOver()//Give the winner
+void gameOver()//Give the winner all the time a piece is placed - Goal 13
 {
-	if(counterPoss1 == 0 && counterPoss2 == 0)
-	{
-		BSP_LCD_SetFont(&Font20);
-		BSP_LCD_SetTextColor(LCD_COLOR_BLUE);
-		BSP_LCD_SetBackColor(LCD_COLOR_WHITE);
-		//BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+35, BSP_LCD_GetYSize()/10+255, (uint8_t *)"    GAME OVER    ", LEFT_MODE);
-
 		if(score1 > score2)
 		{
 			BSP_LCD_SetFont(&Font16);
@@ -834,7 +828,6 @@ void gameOver()//Give the winner
 			BSP_LCD_SetBackColor(LCD_COLOR_WHITE);
 			BSP_LCD_DisplayStringAt(BSP_LCD_GetYSize()-SIZE+40, BSP_LCD_GetYSize()/10+300, (uint8_t *)"ITS A TIE: LOOOSEEERS!", LEFT_MODE);
 		}
-	}
 }
 
 //Write to SD Card
@@ -871,12 +864,13 @@ void writeSDcard()
   * @brief  The application entry point.
   * @retval int
   */
-int main(void)	//TODO: MAIN
+int main(void)
 {
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
   
+
   /* Enable I-Cache---------------------------------------------------------*/
   SCB_EnableICache();
 
@@ -938,7 +932,7 @@ int main(void)	//TODO: MAIN
   {
 	  temperature(); //should appear all the time
 
-	  if(flagPB) //if Push Button pressed
+	  /*if(flagPB) //if Push Button pressed
 	  {
 		  flagPB=0;
 		  flagOnePlayer = 0;
@@ -948,7 +942,7 @@ int main(void)	//TODO: MAIN
 		  BSP_LCD_FillRect(0, 45, 800, 400);
 		  gf = 0;
 		  clearBoard(); //clean board to restart the game
-	  }
+	  }*/
 
 	  if(flagMenu)
 	  {
@@ -1038,6 +1032,11 @@ int main(void)	//TODO: MAIN
 			  counterMoves++;
 			  gameOver();
 		  }
+		  if(flagPB) //If push button pressed
+		  {
+			  flagPB = 0;
+			  nextPlayer(); //change players
+		  }
 	  }
 
 	  else if(flagTwoPlayers)
@@ -1067,6 +1066,11 @@ int main(void)	//TODO: MAIN
 				  HAL_ADC_Start_IT(&hadc1);
 
 			  }
+		  }
+		  if(flagPB) //if push button pressed
+		  {
+			  flagPB = 0;
+			  nextPlayer(); //change players
 		  }
 	  }
   }
@@ -1468,7 +1472,7 @@ static void MX_TIM2_Init(void)
   /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 9999;
-  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_DOWN;
   htim2.Init.Period = 9999;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV4;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
